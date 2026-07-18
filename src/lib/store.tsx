@@ -1,0 +1,259 @@
+"use client";
+
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { PlayerProfile, Session, StatsContext } from "./types";
+import { getSupabase } from "./supabase";
+import {
+  BADGES,
+  earnedBadges,
+  streakDays,
+  totalXp,
+} from "./gamification";
+
+const LS_KEY = "patia-tltc-v1";
+
+interface StoreShape {
+  profile: PlayerProfile;
+  sessions: Session[];
+}
+
+const DEFAULT_PROFILE: PlayerProfile = {
+  fullName: "Pateador/a",
+  division: "M15",
+  preferredFoot: "derecho",
+  skillLevel: 1,
+  createdAt: new Date().toISOString(),
+};
+
+interface PlayerCtx {
+  ready: boolean;
+  cloud: "syncing" | "online" | "offline";
+  profile: PlayerProfile;
+  sessions: Session[];
+  stats: StatsContext;
+  addSession: (s: Session) => void;
+  updateProfile: (p: Partial<PlayerProfile>) => void;
+}
+
+const Ctx = createContext<PlayerCtx | null>(null);
+
+function loadLocal(): StoreShape {
+  if (typeof window === "undefined")
+    return { profile: DEFAULT_PROFILE, sessions: [] };
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return { profile: DEFAULT_PROFILE, sessions: [] };
+    return JSON.parse(raw) as StoreShape;
+  } catch {
+    return { profile: DEFAULT_PROFILE, sessions: [] };
+  }
+}
+
+function saveLocal(data: StoreShape) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(data));
+  } catch {
+    // sin espacio o modo privado: la app sigue en memoria
+  }
+}
+
+export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  const [cloud, setCloud] = useState<PlayerCtx["cloud"]>("syncing");
+  const [profile, setProfile] = useState<PlayerProfile>(DEFAULT_PROFILE);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const userIdRef = useRef<string | null>(null);
+
+  // Carga instantánea desde localStorage, luego hidrata desde Supabase
+  useEffect(() => {
+    const local = loadLocal();
+    setProfile(local.profile);
+    setSessions(local.sessions);
+    setReady(true);
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      setCloud("offline");
+      return;
+    }
+
+    (async () => {
+      try {
+        let { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          const { data, error } = await supabase.auth.signInAnonymously();
+          if (error || !data.session) throw error ?? new Error("sin sesión");
+          sessionData = { session: data.session };
+        }
+        const uid = sessionData.session!.user.id;
+        userIdRef.current = uid;
+
+        await supabase.from("player_profiles").upsert(
+          {
+            id: uid,
+            full_name: local.profile.fullName,
+            division: local.profile.division,
+            preferred_foot: local.profile.preferredFoot,
+            skill_level: local.profile.skillLevel,
+          },
+          { onConflict: "id", ignoreDuplicates: true },
+        );
+
+        const [{ data: prof }, { data: cloudSessions }] = await Promise.all([
+          supabase.from("player_profiles").select("*").eq("id", uid).single(),
+          supabase
+            .from("training_sessions")
+            .select("*, logged_kicks(*)")
+            .eq("player_id", uid)
+            .order("session_date", { ascending: false }),
+        ]);
+
+        if (prof) {
+          setProfile((p) => ({
+            ...p,
+            fullName: prof.full_name,
+            division: prof.division,
+            preferredFoot: prof.preferred_foot,
+            skillLevel: prof.skill_level,
+          }));
+        }
+
+        if (cloudSessions && cloudSessions.length >= local.sessions.length) {
+          setSessions(
+            cloudSessions.map((s) => ({
+              id: s.id,
+              date: s.session_date,
+              rpe: s.rpe_fatigue_index,
+              windKmh: s.wind_velocity_kmh,
+              windDirection: s.wind_direction,
+              mentalNote: s.psychological_note ?? "",
+              confidence: s.confidence,
+              createdAt: s.created_at,
+              kicks: (s.logged_kicks ?? []).map(
+                (k: Record<string, unknown>) => ({
+                  id: k.id as string,
+                  x: Number(k.x_coord),
+                  y: Number(k.y_coord),
+                  distance: k.calculated_distance_m as number,
+                  angle: k.calculated_angle_deg as number,
+                  isMade: k.is_made as boolean,
+                  category: k.kick_category as Session["kicks"][number]["category"],
+                  effortPct: (k.effort_pct as number) ?? 40,
+                  createdAt: k.created_at as string,
+                }),
+              ),
+            })),
+          );
+        }
+        setCloud("online");
+      } catch {
+        setCloud("offline");
+      }
+    })();
+  }, []);
+
+  // Persistencia local ante cada cambio
+  useEffect(() => {
+    if (ready) saveLocal({ profile, sessions });
+  }, [ready, profile, sessions]);
+
+  const addSession = useCallback((s: Session) => {
+    setSessions((prev) => [s, ...prev]);
+
+    const supabase = getSupabase();
+    const uid = userIdRef.current;
+    if (!supabase || !uid) return;
+    (async () => {
+      try {
+        await supabase.from("training_sessions").insert({
+          id: s.id,
+          player_id: uid,
+          session_date: s.date,
+          rpe_fatigue_index: s.rpe,
+          wind_velocity_kmh: s.windKmh,
+          wind_direction: s.windDirection,
+          psychological_note: s.mentalNote || null,
+          confidence: s.confidence,
+        });
+        if (s.kicks.length) {
+          await supabase.from("logged_kicks").insert(
+            s.kicks.map((k) => ({
+              id: k.id,
+              session_id: s.id,
+              player_id: uid,
+              x_coord: k.x,
+              y_coord: k.y,
+              calculated_distance_m: k.distance,
+              calculated_angle_deg: k.angle,
+              is_made: k.isMade,
+              kick_category: k.category,
+              effort_pct: k.effortPct,
+            })),
+          );
+        }
+      } catch {
+        // los datos quedan en localStorage; se reintenta en la próxima carga
+      }
+    })();
+  }, []);
+
+  const updateProfile = useCallback((patch: Partial<PlayerProfile>) => {
+    setProfile((prev) => {
+      const next = { ...prev, ...patch };
+      const supabase = getSupabase();
+      const uid = userIdRef.current;
+      if (supabase && uid) {
+        supabase
+          .from("player_profiles")
+          .update({
+            full_name: next.fullName,
+            division: next.division,
+            preferred_foot: next.preferredFoot,
+            skill_level: next.skillLevel,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", uid)
+          .then(() => {});
+      }
+      return next;
+    });
+  }, []);
+
+  const stats: StatsContext = useMemo(() => {
+    const allKicks = sessions.flatMap((s) => s.kicks);
+    return {
+      sessions,
+      allKicks,
+      profile,
+      streakDays: streakDays(sessions),
+      xp: totalXp(sessions),
+    };
+  }, [sessions, profile]);
+
+  const value = useMemo(
+    () => ({ ready, cloud, profile, sessions, stats, addSession, updateProfile }),
+    [ready, cloud, profile, sessions, stats, addSession, updateProfile],
+  );
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function usePlayer() {
+  const ctx = useContext(Ctx);
+  if (!ctx) throw new Error("usePlayer debe usarse dentro de PlayerProvider");
+  return ctx;
+}
+
+export function useBadges() {
+  const { stats } = usePlayer();
+  const earned = earnedBadges(stats);
+  return { earned, all: BADGES };
+}
