@@ -104,12 +104,15 @@ export function AppNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
+                className={`relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${
                   active
                     ? "bg-gold-400/10 text-gold-300"
                     : "text-chalk-dim hover:bg-pitch-800/70 hover:text-chalk"
                 }`}
               >
+                {active && (
+                  <span className="absolute top-1/2 left-0 h-5 w-0.5 -translate-y-1/2 rounded-full bg-gold-400 shadow-[0_0_8px_rgba(255,209,0,0.6)]" />
+                )}
                 <svg
                   viewBox="0 0 24 24"
                   className="h-5 w-5"
@@ -192,7 +195,7 @@ export function AppNav() {
 
       {/* ── Barra inferior móvil ──────────────────────────────── */}
       <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 lg:hidden">
-        <div className="mx-4 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/15 bg-pitch-900/90 px-3 pt-2 pb-2 shadow-[0_-8px_40px_rgba(5,8,16,0.9)] backdrop-blur-xl">
+        <div className="saltire-weave mx-4 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/20 bg-pitch-900/92 px-3 pt-2 pb-2 shadow-[0_-10px_44px_rgba(3,6,14,0.92)] backdrop-blur-xl">
           {MOBILE_TABS.map((tab) => {
             const active = isActive(pathname, tab.href);
 
@@ -202,9 +205,13 @@ export function AppNav() {
                   key={tab.href}
                   href={tab.href}
                   aria-label="Cargar sesión"
-                  className="btn-gold -mt-8 flex h-16 w-16 flex-col items-center justify-center rounded-full border-4 border-pitch-950"
+                  className="relative -mt-8 flex h-16 w-16 flex-col items-center justify-center"
                 >
-                  {BallIcon}
+                  {/* Halo dorado pulsante */}
+                  <span className="absolute inset-0 rounded-full bg-gold-400/25 blur-md" />
+                  <span className="btn-gold relative flex h-16 w-16 items-center justify-center rounded-full border-4 border-pitch-950">
+                    {BallIcon}
+                  </span>
                 </Link>
               );
             }
@@ -213,10 +220,13 @@ export function AppNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex w-14 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
+                className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
                   active ? "text-gold-400" : "text-chalk-dim hover:text-chalk"
                 }`}
               >
+                {active && (
+                  <span className="absolute top-0 h-0.5 w-6 rounded-full bg-gold-400 shadow-[0_0_8px_rgba(255,209,0,0.6)]" />
+                )}
                 <svg
                   viewBox="0 0 24 24"
                   className="h-5 w-5"
