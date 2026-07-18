@@ -37,7 +37,7 @@ export interface AccountInfo {
   /** guest = sesión anónima · google = cuenta vinculada · none = sin nube */
   kind: "guest" | "google" | "none";
   email: string | null;
-  role: "player" | "admin";
+  role: "player" | "coach" | "admin";
   approvalStatus: "approved" | "pending" | "rejected";
 }
 
@@ -145,7 +145,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setAccount({
           kind: user.is_anonymous ? "guest" : "google",
           email: prof.email ?? user.email ?? null,
-          role: prof.role === "admin" ? "admin" : "player",
+          role:
+            prof.role === "admin" || prof.role === "coach"
+              ? prof.role
+              : "player",
           approvalStatus:
             prof.approval_status === "pending" ||
             prof.approval_status === "rejected"
@@ -182,6 +185,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 isMade: k.is_made as boolean,
                 category: k.kick_category as Session["kicks"][number]["category"],
                 effortPct: (k.effort_pct as number) ?? 40,
+                endX: k.end_x_coord != null ? Number(k.end_x_coord) : undefined,
+                endY: k.end_y_coord != null ? Number(k.end_y_coord) : undefined,
+                result: (k.result ?? undefined) as Session["kicks"][number]["result"],
+                metersGained: (k.meters_gained ?? undefined) as number | undefined,
                 createdAt: k.created_at as string,
               }),
             ),
@@ -241,6 +248,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
               is_made: k.isMade,
               kick_category: k.category,
               effort_pct: k.effortPct,
+              end_x_coord: k.endX ?? null,
+              end_y_coord: k.endY ?? null,
+              result: k.result ?? null,
+              meters_gained: k.metersGained ?? null,
             })),
           );
         }

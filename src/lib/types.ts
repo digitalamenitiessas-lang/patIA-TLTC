@@ -6,6 +6,27 @@ export type KickCategory =
   | "salida_22"
   | "grubber";
 
+/**
+ * Modo táctico de la cancha. Patear a los palos, salir de 22 y buscar
+ * touch son gestos distintos con objetivos y métricas distintas.
+ */
+export type FieldMode = "palos" | "salida" | "touch" | "rastron";
+
+/** Resultado específico del modo (los palos usan solo isMade) */
+export type KickResult =
+  // salida de 22
+  | "recuperada"
+  | "territorio"
+  | "perdida"
+  // touch
+  | "touch_directo"
+  | "touch_pique"
+  | "sin_touch"
+  // rastrón
+  | "try_presion"
+  | "forzo_salida"
+  | "perdida_rastron";
+
 export type WindDirection =
   | "calma"
   | "en_contra"
@@ -25,16 +46,26 @@ export type Division =
 
 export interface Kick {
   id: string;
-  /** Coordenada X en metros (0–70, ancho de cancha) */
+  /** Origen X en metros (coordenadas del modo) */
   x: number;
-  /** Coordenada Y en metros (0–50, distancia a la línea de meta) */
+  /** Origen Y en metros (coordenadas del modo) */
   y: number;
+  /** Palos: distancia a los postes · otros modos: metros ganados */
   distance: number;
+  /** Solo palos: ángulo respecto de la perpendicular (0° = de frente) */
   angle: number;
+  /** Objetivo del gesto cumplido (palos: convertida · touch: salió · etc.) */
   isMade: boolean;
   category: KickCategory;
   /** Esfuerzo de impacto percibido, 10–100 % */
   effortPct: number;
+  /** Dónde terminó la pelota (salida / touch / rastrón) */
+  endX?: number;
+  endY?: number;
+  /** Resultado táctico específico del modo */
+  result?: KickResult;
+  /** Metros netos ganados (modos territoriales) */
+  metersGained?: number;
   createdAt: string;
 }
 
@@ -87,4 +118,50 @@ export interface DrillDef {
   maxEffortPct: number;
   offField: boolean;
   youtubeId?: string;
+}
+
+/* ── Clínica ─────────────────────────────────────────────── */
+
+export interface Coach {
+  id: string;
+  fullName: string;
+  title: string | null;
+  active: boolean;
+}
+
+export interface Clinic {
+  id: string;
+  title: string;
+  clinicDate: string; // ISO yyyy-mm-dd
+  startTime: string | null;
+  location: string;
+  focus: string | null;
+  level: 1 | 2 | 3 | null;
+  prep: string[];
+  notes: string | null;
+}
+
+export interface CoachFeedback {
+  id: string;
+  playerId: string;
+  coachName: string;
+  coachTitle: string | null;
+  body: string;
+  focusNext: string | null;
+  rating: number | null;
+  createdAt: string;
+}
+
+/* ── Ranking ─────────────────────────────────────────────── */
+
+export interface LeaderboardRow {
+  playerId: string;
+  fullName: string;
+  division: string;
+  avatarUrl: string | null;
+  xp: number;
+  kicks: number;
+  made: number;
+  sessions: number;
+  effectiveness: number;
 }

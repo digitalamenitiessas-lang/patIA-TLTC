@@ -1,4 +1,5 @@
 import type { BadgeDef, Session, StatsContext } from "./types";
+import { GOAL_CATEGORIES } from "./field";
 
 export const XP_PER_KICK = 5;
 export const XP_PER_MADE = 5;
@@ -103,7 +104,10 @@ export const BADGES: BadgeDef[] = [
     name: "Cañón del Lawn",
     description: "Convertiste una patada de 40 metros o más.",
     icon: "💣",
-    earned: (c) => c.allKicks.some((k) => k.isMade && k.distance >= 40),
+    earned: (c) =>
+      c.allKicks.some(
+        (k) => k.isMade && k.distance >= 40 && GOAL_CATEGORIES.includes(k.category),
+      ),
   },
   {
     id: "tecnica-pura",
@@ -136,7 +140,10 @@ export const BADGES: BadgeDef[] = [
     name: "Ángulo Imposible",
     description: "Convertiste desde un ángulo cerrado (más de 35°).",
     icon: "📐",
-    earned: (c) => c.allKicks.some((k) => k.isMade && k.angle > 35),
+    earned: (c) =>
+      c.allKicks.some(
+        (k) => k.isMade && k.angle > 35 && GOAL_CATEGORIES.includes(k.category),
+      ),
   },
 ];
 

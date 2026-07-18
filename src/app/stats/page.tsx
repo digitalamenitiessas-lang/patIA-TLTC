@@ -12,8 +12,9 @@ import {
   CartesianGrid,
 } from "recharts";
 import { usePlayer } from "@/lib/store";
-import { zoneOf, ZONE_LABELS } from "@/lib/field";
+import { zoneOf, ZONE_LABELS, GOAL_CATEGORIES, MODE_OF, MODE_SPECS } from "@/lib/field";
 import { EffRing } from "@/components/EffRing";
+import type { FieldMode } from "@/lib/types";
 
 const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -56,7 +57,7 @@ export default function StatsPage() {
       () => Array.from({ length: 3 }, () => ({ attempts: 0, made: 0 })),
     );
     for (const k of kicks) {
-      if (k.category === "punt" || k.category === "grubber") continue;
+      if (!GOAL_CATEGORIES.includes(k.category)) continue;
       const z = zoneOf(k.distance, k.angle);
       grid[z.d][z.a].attempts++;
       if (k.isMade) grid[z.d][z.a].made++;
@@ -79,10 +80,42 @@ export default function StatsPage() {
     return { fresh: effOf(fresh), tired: effOf(tired) };
   }, [sessions]);
 
-  const avgDistMade = made.length
-    ? Math.round(made.reduce((a, k) => a + k.distance, 0) / made.length)
+  const goalMade = made.filter((k) => GOAL_CATEGORIES.includes(k.category));
+  const avgDistMade = goalMade.length
+    ? Math.round(goalMade.reduce((a, k) => a + k.distance, 0) / goalMade.length)
     : 0;
-  const maxDistMade = made.length ? Math.max(...made.map((k) => k.distance)) : 0;
+  const maxDistMade = goalMade.length
+    ? Math.max(...goalMade.map((k) => k.distance))
+    : 0;
+
+  // Juego territorial: salidas, touch y rastrones
+  const territorial = useMemo(() => {
+    const modes: FieldMode[] = ["salida", "touch", "rastron"];
+    return modes
+      .map((m) => {
+        const ks = kicks.filter((k) => MODE_OF[k.category] === m);
+        if (!ks.length) return null;
+        const ok = ks.filter((k) => k.isMade).length;
+        const meters = ks.filter((k) => k.metersGained !== undefined);
+        const avgMeters = meters.length
+          ? Math.round(meters.reduce((a, k) => a + (k.metersGained ?? 0), 0) / meters.length)
+          : null;
+        return {
+          mode: m,
+          name: MODE_SPECS[m].name,
+          count: ks.length,
+          pct: Math.round((ok / ks.length) * 100),
+          avgMeters,
+        };
+      })
+      .filter(Boolean) as {
+      mode: FieldMode;
+      name: string;
+      count: number;
+      pct: number;
+      avgMeters: number | null;
+    }[];
+  }, [kicks]);
 
   return (
     <main className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
@@ -193,6 +226,35 @@ export default function StatsPage() {
               ))}
             </div>
           </section>
+
+          {/* Juego territorial */}
+          {territorial.length > 0 && (
+            <section
+              className="tele-card rise px-5 py-4"
+              style={{ "--rise-delay": "0.28s" } as React.CSSProperties}
+            >
+              <p className="tech-label mb-1">Juego territorial</p>
+              <p className="mb-3 text-[11px] text-chalk-faint">
+                Salidas, touch y rastrones: acá el objetivo no son los palos
+              </p>
+              <div className="flex flex-col gap-2">
+                {territorial.map((t) => (
+                  <div key={t.mode} className="flex items-center gap-3">
+                    <span className="w-24 shrink-0 text-xs text-chalk">{t.name}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-pitch-700">
+                      <div
+                        className={`h-full rounded-full ${t.pct >= 70 ? "bg-try-500" : t.pct >= 45 ? "bg-gold-400" : "bg-miss-500"}`}
+                        style={{ width: `${Math.max(t.pct, 4)}%` }}
+                      />
+                    </div>
+                    <span className="tele-num w-20 shrink-0 text-right text-[11px] text-chalk-dim">
+                      {t.pct}%{t.avgMeters !== null ? ` · ${t.avgMeters}m` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Insight RPE */}
           {rpeInsight && rpeInsight.fresh !== null && rpeInsight.tired !== null && (

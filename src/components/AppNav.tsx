@@ -5,38 +5,41 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "@/lib/store";
 
-const TABS = [
-  {
-    href: "/",
-    label: "Inicio",
-    icon: (
-      <path d="M3 11.5 12 4l9 7.5M5.5 10v9.5h4.5V14h4v5.5h4.5V10" />
-    ),
-  },
-  {
-    href: "/academia",
-    label: "Academia",
-    icon: (
-      <path d="M12 4 2.5 8.5 12 13l9.5-4.5L12 4Zm-6 7v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" />
-    ),
-  },
-  {
-    href: "/cargar",
-    label: "Cargar",
-    icon: null, // botón central especial
-  },
-  {
-    href: "/stats",
-    label: "Stats",
-    icon: <path d="M4 20V10m5.3 10V4m5.4 16v-8m5.3 8V7" />,
-  },
-  {
-    href: "/patia",
-    label: "PatIA",
-    icon: (
-      <path d="M12 3a7 7 0 0 0-7 7v4.5A2.5 2.5 0 0 0 7.5 17H9v-5H6.8M12 3a7 7 0 0 1 7 7v4.5a2.5 2.5 0 0 1-2.5 2.5H15v-5h2.2M10 20h4" />
-    ),
-  },
+const ICONS = {
+  inicio: <path d="M3 11.5 12 4l9 7.5M5.5 10v9.5h4.5V14h4v5.5h4.5V10" />,
+  academia: (
+    <path d="M12 4 2.5 8.5 12 13l9.5-4.5L12 4Zm-6 7v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" />
+  ),
+  clinica: (
+    <path d="M7 3v3m10-3v3M4.5 8.5h15M6 5h12a1.5 1.5 0 0 1 1.5 1.5V19A1.5 1.5 0 0 1 18 20.5H6A1.5 1.5 0 0 1 4.5 19V6.5A1.5 1.5 0 0 1 6 5Zm6 7v4m-2-2h4" />
+  ),
+  ranking: (
+    <path d="M8 4h8v3.5a4 4 0 0 1-8 0V4ZM8 5.5H4.8a3.2 3.2 0 0 0 3.4 3.4M16 5.5h3.2a3.2 3.2 0 0 1-3.4 3.4M12 11.5V15m-3.5 5.5h7M10 15h4l.8 5.5H9.2L10 15Z" />
+  ),
+  stats: <path d="M4 20V10m5.3 10V4m5.4 16v-8m5.3 8V7" />,
+  patia: (
+    <path d="M12 3a7 7 0 0 0-7 7v4.5A2.5 2.5 0 0 0 7.5 17H9v-5H6.8M12 3a7 7 0 0 1 7 7v4.5a2.5 2.5 0 0 1-2.5 2.5H15v-5h2.2M10 20h4" />
+  ),
+} as const;
+
+/** Barra inferior móvil: 5 lugares — el resto vive en la sidebar y en Inicio */
+const MOBILE_TABS = [
+  { href: "/", label: "Inicio", icon: ICONS.inicio },
+  { href: "/clinica", label: "Clínica", icon: ICONS.clinica },
+  { href: "/cargar", label: "Cargar", icon: null }, // botón central especial
+  { href: "/ranking", label: "Ranking", icon: ICONS.ranking },
+  { href: "/patia", label: "PatIA", icon: ICONS.patia },
+];
+
+/** Sidebar de escritorio: navegación completa */
+const SIDEBAR_TABS = [
+  { href: "/", label: "Inicio", icon: ICONS.inicio },
+  { href: "/clinica", label: "Clínica", icon: ICONS.clinica },
+  { href: "/cargar", label: "Cargar", icon: null },
+  { href: "/ranking", label: "Ranking", icon: ICONS.ranking },
+  { href: "/academia", label: "Academia", icon: ICONS.academia },
+  { href: "/stats", label: "Stats", icon: ICONS.stats },
+  { href: "/patia", label: "PatIA", icon: ICONS.patia },
 ];
 
 const BallIcon = (
@@ -83,7 +86,7 @@ export function AppNav() {
         </Link>
 
         <nav className="flex flex-1 flex-col gap-1 px-3">
-          {TABS.map((tab) => {
+          {SIDEBAR_TABS.map((tab) => {
             const active = isActive(pathname, tab.href);
             if (tab.icon === null) {
               return (
@@ -190,7 +193,7 @@ export function AppNav() {
       {/* ── Barra inferior móvil ──────────────────────────────── */}
       <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 lg:hidden">
         <div className="mx-4 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/15 bg-pitch-900/90 px-3 pt-2 pb-2 shadow-[0_-8px_40px_rgba(5,8,16,0.9)] backdrop-blur-xl">
-          {TABS.map((tab) => {
+          {MOBILE_TABS.map((tab) => {
             const active = isActive(pathname, tab.href);
 
             if (tab.icon === null) {

@@ -5,7 +5,9 @@ Telemetría, técnica y progresión gamificada para pateadores en formación —
 
 ## Qué hace
 
-- **Cargar sesión**: tocás el mapa de la cancha donde pateaste; la app calcula distancia, ángulo y lado automáticamente. Al cerrar la sesión registrás cansancio (RPE), viento, confianza y diario mental.
+- **Cargar sesión — cancha táctica por modo**: patear a los palos, salir de 22, buscar touch y jugar rastrón son gestos distintos, y la cancha cambia con cada uno. Palos: distancia, ángulo y dificultad esperable. Salida de 22: zona de caída (corta / contestable / territorial). Touch: dos toques (origen → salida), metros ganados y detección automática del touch. Rastrón: penetración y resultado. Al cerrar la sesión registrás cansancio (RPE), viento, confianza y diario mental.
+- **Ranking y torneo semanal**: tabla viva de la clínica (XP server-side); cada lunes arranca un torneo nuevo, y la temporada acumula todo el año.
+- **La Clínica**: fecha de la próxima clínica con countdown y plan de práctica, y devoluciones individuales de los referentes del club (Nicolás Sánchez, Federico Mentz, Domingo Miotti, Stefano Ferro, Ignacio Rodríguez Prado). El staff (admin/coach) publica clínicas —con push a todos— y firma devoluciones que notifican al jugador.
 - **Inicio**: rango de clínica, XP, racha de días, efectividad semanal e insignias.
 - **Stats**: evolución de 14 días, mapa de honestidad por zonas (distancia × ángulo), correlación fatiga vs. puntería, historial.
 - **Academia**: los 3 niveles de la clínica (Fundamentos → Trayectoria C→J → Mente de Match) con ejercicios off-field de baja carga (metodología Dave Alred, esfuerzo ≤ 40 %), banco de video y simulador táctico.

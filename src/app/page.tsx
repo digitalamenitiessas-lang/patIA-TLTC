@@ -106,7 +106,9 @@ export default function Dashboard() {
         style={{ "--rise-delay": "0.16s" } as React.CSSProperties}
       >
         <div className="mb-4 flex items-center justify-between">
-          <p className="tech-label">Telemetría · últimos 7 días</p>
+          <Link href="/stats" className="tech-label">
+            Telemetría · últimos 7 días <span className="text-gold-400">→</span>
+          </Link>
           <span
             className={`tech-label ${cloud === "online" ? "text-try-400" : cloud === "syncing" ? "text-gold-400" : "text-chalk-faint"}`}
           >

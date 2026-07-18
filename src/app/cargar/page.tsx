@@ -3,19 +3,53 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { InteractiveField } from "@/components/InteractiveField";
-import { kickMetrics } from "@/lib/field";
+import { TacticalField } from "@/components/TacticalField";
+import {
+  MODE_OF,
+  MODE_SPECS,
+  RESULTS_BY_MODE,
+  SALIDA_ORIGIN,
+  SALIDA_ZONE_INFO,
+  kickMetrics,
+  goalDifficulty,
+  salidaMetrics,
+  touchMetrics,
+  rastronMetrics,
+  type ResultOption,
+} from "@/lib/field";
 import { usePlayer } from "@/lib/store";
 import { sessionXp } from "@/lib/gamification";
-import type { Kick, KickCategory, Session, WindDirection } from "@/lib/types";
+import type {
+  FieldMode,
+  Kick,
+  KickCategory,
+  Session,
+  WindDirection,
+} from "@/lib/types";
 
-const KICK_TYPES: { value: KickCategory; label: string }[] = [
-  { value: "conversion", label: "Conversión" },
-  { value: "penalty", label: "Penal" },
-  { value: "drop_kick", label: "Drop" },
-  { value: "salida_22", label: "Salida 22" },
-  { value: "punt", label: "Punt" },
-  { value: "grubber", label: "Grubber" },
+interface Pt {
+  x: number;
+  y: number;
+}
+
+/** Selector táctico: un tile por gesto de pateo */
+const MODE_TILES: {
+  mode: FieldMode;
+  icon: string;
+  categories: { value: KickCategory; label: string }[];
+}[] = [
+  {
+    mode: "palos",
+    icon: "🥅",
+    categories: [
+      { value: "conversion", label: "Conversión" },
+      { value: "penalty", label: "Penal" },
+      { value: "drop_kick", label: "Drop" },
+    ],
+  },
+  { mode: "salida", icon: "🪂", categories: [{ value: "salida_22", label: "Salida 22" }] },
+  { mode: "touch", icon: "🚀", categories: [{ value: "punt", label: "Punt / despeje" }] },
+  { mode: "rastron", icon: "🎳", categories: [{ value: "grubber", label: "Grubber" }] },
 ];
 
 const WINDS: { value: WindDirection; label: string }[] = [
@@ -26,13 +60,23 @@ const WINDS: { value: WindDirection; label: string }[] = [
   { value: "cruzado_der", label: "Cruzado →" },
 ];
 
+const TONE_CLASSES: Record<ResultOption["tone"], string> = {
+  try: "bg-try-500 text-white",
+  gold: "bg-gold-500 text-[#1a1400]",
+  miss: "bg-miss-500 text-white",
+};
+
 export default function CargarPage() {
   const router = useRouter();
   const { addSession } = usePlayer();
 
-  const [kicks, setKicks] = useState<Kick[]>([]);
-  const [pending, setPending] = useState<{ x: number; y: number } | null>(null);
   const [category, setCategory] = useState<KickCategory>("conversion");
+  const mode = MODE_OF[category];
+  const spec = MODE_SPECS[mode];
+
+  const [kicks, setKicks] = useState<Kick[]>([]);
+  const [origin, setOrigin] = useState<Pt | null>(null);
+  const [end, setEnd] = useState<Pt | null>(null);
   const [effort, setEffort] = useState(40);
   const [closing, setClosing] = useState(false);
   const [saved, setSaved] = useState<Session | null>(null);
@@ -44,30 +88,94 @@ export default function CargarPage() {
   const [confidence, setConfidence] = useState(3);
   const [note, setNote] = useState("");
 
-  const metrics = useMemo(
-    () => (pending ? kickMetrics(pending.x, pending.y) : null),
-    [pending],
-  );
+  const clearPending = () => {
+    setOrigin(null);
+    setEnd(null);
+  };
 
+  const switchCategory = (c: KickCategory) => {
+    setCategory(c);
+    if (MODE_OF[c] !== mode) clearPending();
+  };
+
+  const handleTap = (x: number, y: number) => {
+    const pt = { x, y };
+    if (mode === "palos") {
+      setOrigin(pt);
+    } else if (mode === "salida") {
+      setEnd(pt);
+    } else {
+      // dos toques: origen → destino (re-tocar corrige el destino)
+      if (!origin) setOrigin(pt);
+      else setEnd(pt);
+    }
+  };
+
+  /* ── Métricas del intento pendiente ── */
+  const pending = useMemo(() => {
+    if (mode === "palos" && origin) {
+      const m = kickMetrics(origin.x, origin.y);
+      return { ...m, difficulty: goalDifficulty(m.distance, m.angle) };
+    }
+    if (mode === "salida" && end) return salidaMetrics(end.x, end.y);
+    if (mode === "touch" && origin && end) return touchMetrics(origin, end);
+    if (mode === "rastron" && origin && end) return rastronMetrics(origin, end);
+    return null;
+  }, [mode, origin, end]);
+
+  const modeKicks = kicks.filter((k) => MODE_OF[k.category] === mode);
   const made = kicks.filter((k) => k.isMade).length;
 
-  const confirmKick = (isMade: boolean) => {
-    if (!pending || !metrics) return;
-    const kick: Kick = {
+  const pushKick = (isMade: boolean, result?: Kick["result"]) => {
+    let kick: Kick | null = null;
+    const base = {
       id: crypto.randomUUID(),
-      x: pending.x,
-      y: pending.y,
-      distance: metrics.distance,
-      angle: metrics.angle,
-      isMade,
       category,
       effortPct: effort,
+      isMade,
+      result,
       createdAt: new Date().toISOString(),
     };
+
+    if (mode === "palos" && origin) {
+      const m = kickMetrics(origin.x, origin.y);
+      kick = { ...base, x: origin.x, y: origin.y, distance: m.distance, angle: m.angle };
+    } else if (mode === "salida" && end) {
+      const m = salidaMetrics(end.x, end.y);
+      kick = {
+        ...base,
+        x: SALIDA_ORIGIN.x,
+        y: SALIDA_ORIGIN.y,
+        endX: end.x,
+        endY: end.y,
+        distance: m.meters,
+        angle: 0,
+        metersGained: m.meters,
+      };
+    } else if ((mode === "touch" || mode === "rastron") && origin && end) {
+      const meters =
+        mode === "touch"
+          ? touchMetrics(origin, end).meters
+          : rastronMetrics(origin, end).meters;
+      kick = {
+        ...base,
+        x: origin.x,
+        y: origin.y,
+        endX: end.x,
+        endY: end.y,
+        distance: meters,
+        angle: 0,
+        metersGained: meters,
+      };
+    }
+
+    if (!kick) return;
     setKicks((prev) => [...prev, kick]);
-    setPending(null);
+    clearPending();
     if (navigator.vibrate) navigator.vibrate(isMade ? [10, 40, 20] : 15);
   };
+
+  const undoLast = () => setKicks((prev) => prev.slice(0, -1));
 
   const finishSession = () => {
     const session: Session = {
@@ -86,12 +194,19 @@ export default function CargarPage() {
     setClosing(false);
   };
 
-  // Pantalla de resumen post-guardado
+  /* ── Resumen post-guardado ── */
   if (saved) {
     const xp = sessionXp(saved);
     const eff = saved.kicks.length
       ? Math.round((saved.kicks.filter((k) => k.isMade).length / saved.kicks.length) * 100)
       : 0;
+    const byMode = MODE_TILES.map((t) => {
+      const ks = saved.kicks.filter((k) => MODE_OF[k.category] === t.mode);
+      if (!ks.length) return null;
+      const ok = ks.filter((k) => k.isMade).length;
+      return `${t.icon} ${ok}/${ks.length}`;
+    }).filter(Boolean);
+
     return (
       <main className="flex min-h-[70dvh] flex-col items-center justify-center gap-6 text-center">
         <motion.div
@@ -105,8 +220,11 @@ export default function CargarPage() {
           <p className="tele-num text-4xl font-semibold text-chalk">+{xp} XP</p>
           <div className="chalk-line my-2 w-full" />
           <p className="tele-num text-sm text-chalk-dim">
-            {saved.kicks.length} patadas · {eff}% efectividad
+            {saved.kicks.length} patadas · {eff}% objetivo cumplido
           </p>
+          {byMode.length > 0 && (
+            <p className="tele-num text-sm text-chalk-dim">{byMode.join(" · ")}</p>
+          )}
           {saved.kicks.length > 0 && saved.kicks.every((k) => k.effortPct <= 40) && (
             <p className="text-xs text-try-400">
               🪶 Sesión de técnica pura — así se construye la cadena cinética
@@ -123,44 +241,85 @@ export default function CargarPage() {
     );
   }
 
+  const panelReady = pending !== null;
+  const results = RESULTS_BY_MODE[mode];
+
   return (
-    <main className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
+    <main className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start lg:gap-6">
       <header className="flex items-end justify-between lg:col-span-2">
         <div>
-          <p className="tech-label">Sesión de pateo</p>
-          <h1 className="display text-2xl text-chalk">Tocá donde pateás</h1>
+          <p className="tech-label">Sesión de pateo · {spec.name}</p>
+          <h1 className="display text-2xl text-chalk">{spec.objective}</h1>
         </div>
         <div className="text-right">
           <p className="tele-num text-lg font-semibold text-chalk">
             <span className="text-try-400">{made}</span>
             <span className="text-chalk-faint">/{kicks.length}</span>
           </p>
-          <p className="tech-label">aciertos</p>
+          <p className="tech-label">objetivos</p>
         </div>
       </header>
 
-      {/* Selector de tipo de patada */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1 lg:col-start-2 lg:row-start-2 lg:flex-wrap lg:overflow-visible">
-        {KICK_TYPES.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setCategory(t.value)}
-            className={`shrink-0 rounded-full border px-3.5 py-1.5 font-mono text-[11px] tracking-wide transition-colors ${
-              category === t.value
-                ? "border-gold-400/60 bg-gold-400/15 text-gold-300"
-                : "border-navy-300/20 text-chalk-dim"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Selector táctico de gesto */}
+      <div className="flex flex-col gap-2 lg:col-start-2 lg:row-start-2">
+        <div className="grid grid-cols-4 gap-1.5">
+          {MODE_TILES.map((t) => {
+            const active = mode === t.mode;
+            const count = kicks.filter((k) => MODE_OF[k.category] === t.mode).length;
+            return (
+              <button
+                key={t.mode}
+                onClick={() => switchCategory(t.categories[0].value)}
+                className={`relative flex flex-col items-center gap-0.5 rounded-2xl border px-1 py-2.5 transition-all ${
+                  active
+                    ? "border-gold-400/60 bg-gold-400/10"
+                    : "border-navy-300/20 bg-pitch-800/50"
+                }`}
+              >
+                <span className="text-lg">{t.icon}</span>
+                <span
+                  className={`font-mono text-[9px] tracking-wide uppercase ${
+                    active ? "text-gold-300" : "text-chalk-dim"
+                  }`}
+                >
+                  {MODE_SPECS[t.mode].name}
+                </span>
+                {count > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-navy-500 px-1 font-mono text-[9px] text-chalk">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {/* Sub-variantes del modo palos */}
+        {mode === "palos" && (
+          <div className="flex gap-1.5">
+            {MODE_TILES[0].categories.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => switchCategory(c.value)}
+                className={`flex-1 rounded-full border px-3 py-1.5 font-mono text-[11px] tracking-wide transition-colors ${
+                  category === c.value
+                    ? "border-gold-400/60 bg-gold-400/15 text-gold-300"
+                    : "border-navy-300/20 text-chalk-dim"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="lg:col-start-1 lg:row-start-2 lg:row-span-4">
-        <InteractiveField
-          kicks={kicks}
-          pending={pending}
-          onTap={(x, y) => setPending({ x, y })}
+        <TacticalField
+          mode={mode}
+          kicks={modeKicks}
+          origin={mode === "salida" ? SALIDA_ORIGIN : origin}
+          end={end}
+          onTap={handleTap}
         />
       </div>
 
@@ -190,7 +349,7 @@ export default function CargarPage() {
 
       {/* Panel de confirmación */}
       <AnimatePresence>
-        {pending && metrics && (
+        {panelReady && pending && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -198,43 +357,94 @@ export default function CargarPage() {
             transition={{ type: "spring", stiffness: 300, damping: 24 }}
             className="tele-card fixed bottom-24 left-1/2 z-30 w-[calc(100%-2rem)] max-w-[26rem] -translate-x-1/2 px-5 py-4 shadow-2xl shadow-black/60 lg:static lg:col-start-2 lg:row-start-4 lg:w-full lg:max-w-none lg:translate-x-0 lg:shadow-none"
           >
-            <div className="mb-3 flex justify-around">
-              <div className="text-center">
-                <p className="tele-num text-2xl font-semibold text-gold-300">
-                  {metrics.distance}
-                  <span className="text-xs">m</span>
+            {/* ── Métricas por modo ── */}
+            {mode === "palos" && "difficulty" in pending && (
+              <>
+                <div className="mb-3 flex justify-around">
+                  <Metric big={`${pending.distance}`} unit="m" label="distancia" gold />
+                  <Metric big={`${pending.angle}°`} label="ángulo" gold />
+                  <Metric big={pending.side} label="lado" small />
+                </div>
+                <div className="mb-3">
+                  <div className="flex items-center justify-between">
+                    <p className="tech-label">Dificultad del intento</p>
+                    <p className="tele-num text-xs font-semibold text-chalk">
+                      {pending.difficulty}% esperable
+                    </p>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-pitch-700">
+                    <div
+                      className={`h-full rounded-full ${pending.difficulty >= 65 ? "bg-try-500" : pending.difficulty >= 35 ? "bg-gold-400" : "bg-miss-500"}`}
+                      style={{ width: `${pending.difficulty}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2.5">
+                  <button onClick={() => pushKick(true)} className="flex-1 rounded-xl bg-try-500 py-3.5 text-sm font-bold text-white uppercase active:scale-95">
+                    Adentro ✓
+                  </button>
+                  <button onClick={() => pushKick(false)} className="flex-1 rounded-xl bg-miss-500 py-3.5 text-sm font-bold text-white uppercase active:scale-95">
+                    Afuera ✗
+                  </button>
+                </div>
+              </>
+            )}
+
+            {mode === "salida" && "zone" in pending && (
+              <>
+                <div className="mb-2 flex justify-around">
+                  <Metric big={`${pending.meters}`} unit="m" label="profundidad" gold />
+                  <Metric big={SALIDA_ZONE_INFO[pending.zone].label} label="zona de caída" small />
+                  <Metric big={pending.side} label="sector" small />
+                </div>
+                <p className="mb-3 text-center text-[11px] text-chalk-dim">
+                  {SALIDA_ZONE_INFO[pending.zone].note}
                 </p>
-                <p className="tech-label">distancia</p>
-              </div>
-              <div className="text-center">
-                <p className="tele-num text-2xl font-semibold text-gold-300">
-                  {metrics.angle}°
+                <ResultButtons options={results!} onPick={(o) => pushKick(o.made, o.value)} />
+              </>
+            )}
+
+            {mode === "touch" && "foundTouch" in pending && (
+              <>
+                <div className="mb-2 flex justify-around">
+                  <Metric big={`${pending.meters}`} unit="m" label="metros ganados" gold />
+                  <Metric
+                    big={pending.foundTouch ? `Touch ${pending.sideOut}` : "Quedó adentro"}
+                    label="salida"
+                    small
+                  />
+                </div>
+                <p className="mb-3 text-center text-[11px] text-chalk-dim">
+                  {pending.foundTouch
+                    ? "La pelota salió: confirmá cómo encontró el touch"
+                    : "No cruzó la línea de touch: posesión viva para el rival"}
                 </p>
-                <p className="tech-label">ángulo</p>
-              </div>
-              <div className="text-center">
-                <p className="tele-num text-2xl font-semibold text-chalk">
-                  {metrics.side}
+                <ResultButtons
+                  options={results!.filter((o) =>
+                    pending.foundTouch ? o.made : !o.made,
+                  )}
+                  onPick={(o) => pushKick(o.made, o.value)}
+                />
+              </>
+            )}
+
+            {mode === "rastron" && "inGoal" in pending && (
+              <>
+                <div className="mb-2 flex justify-around">
+                  <Metric big={`${pending.meters}`} unit="m" label="penetración" gold />
+                  <Metric big={pending.inGoal ? "In-goal" : "Campo"} label="terminó en" small />
+                </div>
+                <p className="mb-3 text-center text-[11px] text-chalk-dim">
+                  {pending.inGoal
+                    ? "Rastrón al in-goal: try, touch-down rival o salida de 22"
+                    : "Pelota al piso detrás de la línea defensiva"}
                 </p>
-                <p className="tech-label">lado</p>
-              </div>
-            </div>
-            <div className="flex gap-2.5">
-              <button
-                onClick={() => confirmKick(true)}
-                className="flex-1 rounded-xl bg-try-500 py-3.5 text-sm font-bold text-white uppercase active:scale-95"
-              >
-                Adentro ✓
-              </button>
-              <button
-                onClick={() => confirmKick(false)}
-                className="flex-1 rounded-xl bg-miss-500 py-3.5 text-sm font-bold text-white uppercase active:scale-95"
-              >
-                Afuera ✗
-              </button>
-            </div>
+                <ResultButtons options={results!} onPick={(o) => pushKick(o.made, o.value)} />
+              </>
+            )}
+
             <button
-              onClick={() => setPending(null)}
+              onClick={clearPending}
               className="mt-2 w-full text-center font-mono text-[10px] tracking-wider text-chalk-faint uppercase"
             >
               descartar
@@ -243,13 +453,22 @@ export default function CargarPage() {
         )}
       </AnimatePresence>
 
-      {kicks.length > 0 && !pending && (
-        <button
-          onClick={() => setClosing(true)}
-          className="btn-gold rounded-2xl py-4 text-sm font-bold tracking-wide uppercase lg:col-start-2 lg:row-start-5"
-        >
-          Terminar sesión ({kicks.length} {kicks.length === 1 ? "patada" : "patadas"})
-        </button>
+      {kicks.length > 0 && !panelReady && (
+        <div className="flex gap-2 lg:col-start-2 lg:row-start-5 lg:flex-col">
+          <button
+            onClick={() => setClosing(true)}
+            className="btn-gold flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide uppercase"
+          >
+            Terminar sesión ({kicks.length})
+          </button>
+          <button
+            onClick={undoLast}
+            aria-label="Deshacer última patada"
+            className="rounded-2xl border border-navy-300/25 px-4 font-mono text-[11px] tracking-wider text-chalk-dim uppercase hover:text-chalk lg:py-3"
+          >
+            ↩ deshacer
+          </button>
+        </div>
       )}
 
       {/* Modal de cierre: RPE, viento, diario mental */}
@@ -355,5 +574,55 @@ export default function CargarPage() {
         )}
       </AnimatePresence>
     </main>
+  );
+}
+
+function Metric({
+  big,
+  unit,
+  label,
+  gold,
+  small,
+}: {
+  big: string;
+  unit?: string;
+  label: string;
+  gold?: boolean;
+  small?: boolean;
+}) {
+  return (
+    <div className="text-center">
+      <p
+        className={`tele-num font-semibold ${gold ? "text-gold-300" : "text-chalk"} ${
+          small ? "text-base capitalize" : "text-2xl"
+        }`}
+      >
+        {big}
+        {unit && <span className="text-xs">{unit}</span>}
+      </p>
+      <p className="tech-label">{label}</p>
+    </div>
+  );
+}
+
+function ResultButtons({
+  options,
+  onPick,
+}: {
+  options: ResultOption[];
+  onPick: (o: ResultOption) => void;
+}) {
+  return (
+    <div className={`grid gap-2 ${options.length >= 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          onClick={() => onPick(o)}
+          className={`rounded-xl py-3 text-[11px] leading-tight font-bold uppercase active:scale-95 ${TONE_CLASSES[o.tone]}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }

@@ -42,6 +42,26 @@ export default function AdminPage() {
     if (ready && account.role === "admin") void load();
   }, [ready, account.role, load]);
 
+  const toggleRole = async (playerId: string, current: string) => {
+    const supabase = getSupabase();
+    if (!supabase || busy) return;
+    const next = current === "coach" ? "player" : "coach";
+    setBusy(playerId);
+    try {
+      const { error } = await supabase
+        .from("player_profiles")
+        .update({ role: next, updated_at: new Date().toISOString() })
+        .eq("id", playerId);
+      if (!error) {
+        setRows((prev) =>
+          prev.map((r) => (r.id === playerId ? { ...r, role: next } : r)),
+        );
+      }
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const decide = async (playerId: string, decision: "approved" | "rejected") => {
     setBusy(playerId);
     try {
@@ -156,6 +176,11 @@ export default function AdminPage() {
                       admin
                     </span>
                   )}
+                  {r.role === "coach" && (
+                    <span className="ml-1.5 rounded-full border border-navy-300/40 px-1.5 py-0.5 font-mono text-[9px] text-navy-300 uppercase">
+                      coach
+                    </span>
+                  )}
                 </p>
                 <p className="truncate text-[11px] text-chalk-dim">
                   {r.email ?? "invitado anónimo"} · {r.division}
@@ -172,13 +197,31 @@ export default function AdminPage() {
               ) : (
                 r.id !== userId &&
                 r.email && (
-                  <button
-                    disabled={busy === r.id}
-                    onClick={() => decide(r.id, "rejected")}
-                    className="shrink-0 rounded-lg border border-navy-300/25 px-2.5 py-1.5 font-mono text-[10px] text-chalk-faint uppercase hover:border-miss-500/50 hover:text-miss-500"
-                  >
-                    Revocar
-                  </button>
+                  <div className="flex shrink-0 gap-1.5">
+                    <button
+                      disabled={busy === r.id}
+                      onClick={() => toggleRole(r.id, r.role)}
+                      title={
+                        r.role === "coach"
+                          ? "Quitar rol de referente"
+                          : "Nombrar referente (puede dejar devoluciones)"
+                      }
+                      className={`rounded-lg border px-2.5 py-1.5 font-mono text-[10px] uppercase ${
+                        r.role === "coach"
+                          ? "border-navy-300/50 text-navy-300"
+                          : "border-navy-300/25 text-chalk-faint hover:text-navy-300"
+                      }`}
+                    >
+                      {r.role === "coach" ? "Coach ✓" : "Coach"}
+                    </button>
+                    <button
+                      disabled={busy === r.id}
+                      onClick={() => decide(r.id, "rejected")}
+                      className="rounded-lg border border-navy-300/25 px-2.5 py-1.5 font-mono text-[10px] text-chalk-faint uppercase hover:border-miss-500/50 hover:text-miss-500"
+                    >
+                      Revocar
+                    </button>
+                  </div>
                 )
               )}
             </div>
