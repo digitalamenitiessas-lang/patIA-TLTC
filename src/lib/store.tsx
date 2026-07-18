@@ -33,14 +33,35 @@ const DEFAULT_PROFILE: PlayerProfile = {
   createdAt: new Date().toISOString(),
 };
 
+export interface AccountInfo {
+  /** guest = sesión anónima · google = cuenta vinculada · none = sin nube */
+  kind: "guest" | "google" | "none";
+  email: string | null;
+  role: "player" | "admin";
+  approvalStatus: "approved" | "pending" | "rejected";
+}
+
+const DEFAULT_ACCOUNT: AccountInfo = {
+  kind: "none",
+  email: null,
+  role: "player",
+  approvalStatus: "approved",
+};
+
 interface PlayerCtx {
   ready: boolean;
   cloud: "syncing" | "online" | "offline";
   profile: PlayerProfile;
   sessions: Session[];
   stats: StatsContext;
+  account: AccountInfo;
+  userId: string | null;
   addSession: (s: Session) => void;
   updateProfile: (p: Partial<PlayerProfile>) => void;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  /** Token de acceso actual para llamar rutas API autenticadas */
+  getAccessToken: () => Promise<string | null>;
 }
 
 const Ctx = createContext<PlayerCtx | null>(null);
@@ -70,95 +91,119 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [cloud, setCloud] = useState<PlayerCtx["cloud"]>("syncing");
   const [profile, setProfile] = useState<PlayerProfile>(DEFAULT_PROFILE);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [account, setAccount] = useState<AccountInfo>(DEFAULT_ACCOUNT);
+  const [userId, setUserId] = useState<string | null>(null);
   const userIdRef = useRef<string | null>(null);
 
-  // Carga instantánea desde localStorage, luego hidrata desde Supabase
-  useEffect(() => {
-    const local = loadLocal();
-    setProfile(local.profile);
-    setSessions(local.sessions);
-    setReady(true);
-
+  const hydrateFromCloud = useCallback(async (localFallback: StoreShape) => {
     const supabase = getSupabase();
     if (!supabase) {
       setCloud("offline");
       return;
     }
-
-    (async () => {
-      try {
-        let { data: sessionData } = await supabase.auth.getSession();
-        if (!sessionData.session) {
-          const { data, error } = await supabase.auth.signInAnonymously();
-          if (error || !data.session) throw error ?? new Error("sin sesión");
-          sessionData = { session: data.session };
-        }
-        const uid = sessionData.session!.user.id;
-        userIdRef.current = uid;
-
-        await supabase.from("player_profiles").upsert(
-          {
-            id: uid,
-            full_name: local.profile.fullName,
-            division: local.profile.division,
-            preferred_foot: local.profile.preferredFoot,
-            skill_level: local.profile.skillLevel,
-          },
-          { onConflict: "id", ignoreDuplicates: true },
-        );
-
-        const [{ data: prof }, { data: cloudSessions }] = await Promise.all([
-          supabase.from("player_profiles").select("*").eq("id", uid).single(),
-          supabase
-            .from("training_sessions")
-            .select("*, logged_kicks(*)")
-            .eq("player_id", uid)
-            .order("session_date", { ascending: false }),
-        ]);
-
-        if (prof) {
-          setProfile((p) => ({
-            ...p,
-            fullName: prof.full_name,
-            division: prof.division,
-            preferredFoot: prof.preferred_foot,
-            skillLevel: prof.skill_level,
-          }));
-        }
-
-        if (cloudSessions && cloudSessions.length >= local.sessions.length) {
-          setSessions(
-            cloudSessions.map((s) => ({
-              id: s.id,
-              date: s.session_date,
-              rpe: s.rpe_fatigue_index,
-              windKmh: s.wind_velocity_kmh,
-              windDirection: s.wind_direction,
-              mentalNote: s.psychological_note ?? "",
-              confidence: s.confidence,
-              createdAt: s.created_at,
-              kicks: (s.logged_kicks ?? []).map(
-                (k: Record<string, unknown>) => ({
-                  id: k.id as string,
-                  x: Number(k.x_coord),
-                  y: Number(k.y_coord),
-                  distance: k.calculated_distance_m as number,
-                  angle: k.calculated_angle_deg as number,
-                  isMade: k.is_made as boolean,
-                  category: k.kick_category as Session["kicks"][number]["category"],
-                  effortPct: (k.effort_pct as number) ?? 40,
-                  createdAt: k.created_at as string,
-                }),
-              ),
-            })),
-          );
-        }
-        setCloud("online");
-      } catch {
-        setCloud("offline");
+    try {
+      let { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        const { data, error } = await supabase.auth.signInAnonymously();
+        if (error || !data.session) throw error ?? new Error("sin sesión");
+        sessionData = { session: data.session };
       }
-    })();
+      const user = sessionData.session!.user;
+      const uid = user.id;
+      userIdRef.current = uid;
+      setUserId(uid);
+
+      // El trigger de la BD crea el perfil; el upsert cubre proyectos sin trigger
+      await supabase.from("player_profiles").upsert(
+        {
+          id: uid,
+          full_name: localFallback.profile.fullName,
+          division: localFallback.profile.division,
+          preferred_foot: localFallback.profile.preferredFoot,
+          skill_level: localFallback.profile.skillLevel,
+        },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
+
+      const [{ data: prof }, { data: cloudSessions }] = await Promise.all([
+        supabase.from("player_profiles").select("*").eq("id", uid).single(),
+        supabase
+          .from("training_sessions")
+          .select("*, logged_kicks(*)")
+          .eq("player_id", uid)
+          .order("session_date", { ascending: false }),
+      ]);
+
+      if (prof) {
+        setProfile((p) => ({
+          ...p,
+          fullName: prof.full_name,
+          division: prof.division,
+          preferredFoot: prof.preferred_foot,
+          skillLevel: prof.skill_level,
+        }));
+        setAccount({
+          kind: user.is_anonymous ? "guest" : "google",
+          email: prof.email ?? user.email ?? null,
+          role: prof.role === "admin" ? "admin" : "player",
+          approvalStatus:
+            prof.approval_status === "pending" ||
+            prof.approval_status === "rejected"
+              ? prof.approval_status
+              : "approved",
+        });
+      } else {
+        setAccount({
+          kind: user.is_anonymous ? "guest" : "google",
+          email: user.email ?? null,
+          role: "player",
+          approvalStatus: "approved",
+        });
+      }
+
+      if (cloudSessions && cloudSessions.length >= localFallback.sessions.length) {
+        setSessions(
+          cloudSessions.map((s) => ({
+            id: s.id,
+            date: s.session_date,
+            rpe: s.rpe_fatigue_index,
+            windKmh: s.wind_velocity_kmh,
+            windDirection: s.wind_direction,
+            mentalNote: s.psychological_note ?? "",
+            confidence: s.confidence,
+            createdAt: s.created_at,
+            kicks: (s.logged_kicks ?? []).map(
+              (k: Record<string, unknown>) => ({
+                id: k.id as string,
+                x: Number(k.x_coord),
+                y: Number(k.y_coord),
+                distance: k.calculated_distance_m as number,
+                angle: k.calculated_angle_deg as number,
+                isMade: k.is_made as boolean,
+                category: k.kick_category as Session["kicks"][number]["category"],
+                effortPct: (k.effort_pct as number) ?? 40,
+                createdAt: k.created_at as string,
+              }),
+            ),
+          })),
+        );
+      }
+      setCloud("online");
+    } catch {
+      setCloud("offline");
+    }
   }, []);
+
+  // Carga instantánea desde localStorage, luego hidrata desde Supabase.
+  // localStorage solo existe en el cliente: hidratar acá evita el mismatch con el SSR.
+  useEffect(() => {
+    const local = loadLocal();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProfile(local.profile);
+    setSessions(local.sessions);
+    setReady(true);
+    void hydrateFromCloud(local);
+  }, [hydrateFromCloud]);
 
   // Persistencia local ante cada cambio
   useEffect(() => {
@@ -227,6 +272,44 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    const redirectTo = `${window.location.origin}/login`;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.user?.is_anonymous) {
+      // Invitado que vincula su Google: conserva todos sus datos
+      const { error } = await supabase.auth.linkIdentity({
+        provider: "google",
+        options: { redirectTo },
+      });
+      if (!error) return;
+    }
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    const supabase = getSupabase();
+    if (supabase) await supabase.auth.signOut();
+    // Al recargar, el store abre una sesión de invitado nueva
+    window.location.href = "/";
+  }, []);
+
+  const getAccessToken = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return null;
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }, []);
+
   const stats: StatsContext = useMemo(() => {
     const allKicks = sessions.flatMap((s) => s.kicks);
     return {
@@ -239,8 +322,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [sessions, profile]);
 
   const value = useMemo(
-    () => ({ ready, cloud, profile, sessions, stats, addSession, updateProfile }),
-    [ready, cloud, profile, sessions, stats, addSession, updateProfile],
+    () => ({
+      ready,
+      cloud,
+      profile,
+      sessions,
+      stats,
+      account,
+      userId,
+      addSession,
+      updateProfile,
+      signInWithGoogle,
+      signOut,
+      getAccessToken,
+    }),
+    [
+      ready,
+      cloud,
+      profile,
+      sessions,
+      stats,
+      account,
+      userId,
+      addSession,
+      updateProfile,
+      signInWithGoogle,
+      signOut,
+      getAccessToken,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

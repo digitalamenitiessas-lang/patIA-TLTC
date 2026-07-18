@@ -28,7 +28,7 @@ const WINDS: { value: WindDirection; label: string }[] = [
 
 export default function CargarPage() {
   const router = useRouter();
-  const { addSession, profile } = usePlayer();
+  const { addSession } = usePlayer();
 
   const [kicks, setKicks] = useState<Kick[]>([]);
   const [pending, setPending] = useState<{ x: number; y: number } | null>(null);
@@ -124,8 +124,8 @@ export default function CargarPage() {
   }
 
   return (
-    <main className="flex flex-col gap-4">
-      <header className="flex items-end justify-between">
+    <main className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
+      <header className="flex items-end justify-between lg:col-span-2">
         <div>
           <p className="tech-label">Sesión de pateo</p>
           <h1 className="display text-2xl text-chalk">Tocá donde pateás</h1>
@@ -140,7 +140,7 @@ export default function CargarPage() {
       </header>
 
       {/* Selector de tipo de patada */}
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-1 lg:col-start-2 lg:row-start-2 lg:flex-wrap lg:overflow-visible">
         {KICK_TYPES.map((t) => (
           <button
             key={t.value}
@@ -156,14 +156,16 @@ export default function CargarPage() {
         ))}
       </div>
 
-      <InteractiveField
-        kicks={kicks}
-        pending={pending}
-        onTap={(x, y) => setPending({ x, y })}
-      />
+      <div className="lg:col-start-1 lg:row-start-2 lg:row-span-4">
+        <InteractiveField
+          kicks={kicks}
+          pending={pending}
+          onTap={(x, y) => setPending({ x, y })}
+        />
+      </div>
 
       {/* Slider de esfuerzo — filosofía Alred */}
-      <div className="tele-card px-4 py-3">
+      <div className="tele-card px-4 py-3 lg:col-start-2 lg:row-start-3">
         <div className="flex items-center justify-between">
           <p className="tech-label">Esfuerzo de impacto</p>
           <p
@@ -194,7 +196,7 @@ export default function CargarPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 16 }}
             transition={{ type: "spring", stiffness: 300, damping: 24 }}
-            className="tele-card fixed bottom-24 left-1/2 z-30 w-[calc(100%-2rem)] max-w-[26rem] -translate-x-1/2 px-5 py-4 shadow-2xl shadow-black/60"
+            className="tele-card fixed bottom-24 left-1/2 z-30 w-[calc(100%-2rem)] max-w-[26rem] -translate-x-1/2 px-5 py-4 shadow-2xl shadow-black/60 lg:static lg:col-start-2 lg:row-start-4 lg:w-full lg:max-w-none lg:translate-x-0 lg:shadow-none"
           >
             <div className="mb-3 flex justify-around">
               <div className="text-center">
@@ -244,7 +246,7 @@ export default function CargarPage() {
       {kicks.length > 0 && !pending && (
         <button
           onClick={() => setClosing(true)}
-          className="btn-gold rounded-2xl py-4 text-sm font-bold tracking-wide uppercase"
+          className="btn-gold rounded-2xl py-4 text-sm font-bold tracking-wide uppercase lg:col-start-2 lg:row-start-5"
         >
           Terminar sesión ({kicks.length} {kicks.length === 1 ? "patada" : "patadas"})
         </button>
@@ -257,7 +259,7 @@ export default function CargarPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 backdrop-blur-sm lg:items-center"
             onClick={() => setClosing(false)}
           >
             <motion.div
@@ -266,7 +268,7 @@ export default function CargarPage() {
               exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 260, damping: 28 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-t-3xl border-t border-navy-300/25 bg-pitch-900 px-5 pt-5 pb-8"
+              className="w-full max-w-md rounded-t-3xl border-t border-navy-300/25 bg-pitch-900 px-5 pt-5 pb-8 lg:rounded-3xl lg:border lg:pb-6"
             >
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-chalk-faint/40" />
               <h2 className="display mb-4 text-xl text-chalk">Cerrar la sesión</h2>

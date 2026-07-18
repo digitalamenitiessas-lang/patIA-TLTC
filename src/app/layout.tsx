@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Archivo, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
-import { BottomNav } from "@/components/BottomNav";
+import { AppNav } from "@/components/AppNav";
+import { ApprovalGate } from "@/components/ApprovalGate";
 import { PlayerProvider } from "@/lib/store";
 
 const fraunces = Fraunces({
@@ -24,6 +25,16 @@ export const metadata: Metadata = {
   title: "PatIA · Lawn Tennis",
   description:
     "Clínica de Pateadores Daniel Tejerizo — Tucumán Lawn Tennis Club. Telemetría, técnica y progresión para pateadores en formación.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "PatIA",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
@@ -45,10 +56,12 @@ export default function RootLayout({
     >
       <body className="grain stadium-glow min-h-dvh">
         <PlayerProvider>
-          <div className="mx-auto max-w-md min-h-dvh px-4 pt-6 pb-28">
-            {children}
+          <AppNav />
+          <div className="lg:pl-60">
+            <div className="mx-auto min-h-dvh w-full max-w-md px-4 pt-6 pb-28 lg:max-w-3xl lg:px-8 lg:pt-10 lg:pb-16 xl:max-w-4xl">
+              <ApprovalGate>{children}</ApprovalGate>
+            </div>
           </div>
-          <BottomNav />
         </PlayerProvider>
       </body>
     </html>

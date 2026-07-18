@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -19,6 +19,8 @@ const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 export default function StatsPage() {
   const { sessions, stats } = usePlayer();
+  // Ancla temporal estable por montaje: evita recomputar la ventana en cada render
+  const [now] = useState(() => Date.now());
   const kicks = stats.allKicks;
   const made = kicks.filter((k) => k.isMade);
   const eff = kicks.length ? (made.length / kicks.length) * 100 : 0;
@@ -34,7 +36,7 @@ export default function StatsPage() {
     }
     const out: { day: string; intentos: number; aciertos: number; efectividad: number }[] = [];
     for (let i = 13; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 86_400_000);
+      const d = new Date(now - i * 86_400_000);
       const key = d.toISOString().slice(0, 10);
       const v = map.get(key);
       out.push({
@@ -45,7 +47,7 @@ export default function StatsPage() {
       });
     }
     return out;
-  }, [sessions]);
+  }, [sessions, now]);
 
   // Mapa de honestidad: efectividad por zona distancia × ángulo
   const zones = useMemo(() => {
@@ -83,14 +85,14 @@ export default function StatsPage() {
   const maxDistMade = made.length ? Math.max(...made.map((k) => k.distance)) : 0;
 
   return (
-    <main className="flex flex-col gap-5">
-      <header className="rise" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
+    <main className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+      <header className="rise lg:col-span-2" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
         <p className="tech-label">Telemetría de carrera</p>
         <h1 className="display text-2xl text-chalk">Tus números</h1>
       </header>
 
       {kicks.length === 0 ? (
-        <div className="tele-card px-5 py-10 text-center">
+        <div className="tele-card px-5 py-10 text-center lg:col-span-2">
           <p className="text-4xl">📊</p>
           <p className="mt-2 text-sm text-chalk-dim">
             Todavía no hay datos. Cargá tu primera sesión y acá aparece tu telemetría.
@@ -225,9 +227,9 @@ export default function StatsPage() {
           )}
 
           {/* Historial */}
-          <section className="rise" style={{ "--rise-delay": "0.4s" } as React.CSSProperties}>
+          <section className="rise lg:col-span-2" style={{ "--rise-delay": "0.4s" } as React.CSSProperties}>
             <p className="tech-label mb-2 px-1">Historial de sesiones</p>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2">
               {sessions.slice(0, 10).map((s) => {
                 const m = s.kicks.filter((k) => k.isMade).length;
                 const e = s.kicks.length ? Math.round((m / s.kicks.length) * 100) : 0;

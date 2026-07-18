@@ -37,9 +37,9 @@ export default function Dashboard() {
   if (!ready) return null;
 
   return (
-    <main className="flex flex-col gap-5">
+    <main className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
       {/* Cabecera heráldica */}
-      <header className="rise flex items-center gap-4" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
+      <header className="rise flex items-center gap-4 lg:col-span-2" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
         <Image
           src="/escudo.webp"
           alt="Escudo Tucumán Lawn Tennis Club"
@@ -219,7 +219,7 @@ export default function Dashboard() {
       {/* CTA principal */}
       <Link
         href="/cargar"
-        className="btn-gold rise flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold tracking-wide uppercase"
+        className="btn-gold rise flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-bold tracking-wide uppercase lg:col-span-2"
         style={{ "--rise-delay": "0.4s" } as React.CSSProperties}
       >
         Iniciar sesión de pateo

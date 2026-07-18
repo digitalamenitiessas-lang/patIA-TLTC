@@ -14,8 +14,8 @@ export default function AcademiaPage() {
   const level = LEVELS[selected - 1];
 
   return (
-    <main className="flex flex-col gap-5">
-      <header className="rise" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
+    <main className="flex flex-col gap-5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+      <header className="rise lg:col-span-2" style={{ "--rise-delay": "0s" } as React.CSSProperties}>
         <p className="tech-label">Academia off-field</p>
         <h1 className="display text-2xl text-chalk">Entrenar la cabeza y el botín</h1>
         <p className="mt-1 text-xs text-chalk-dim">
@@ -25,7 +25,7 @@ export default function AcademiaPage() {
 
       {/* Selector de nivel */}
       <div
-        className="rise grid grid-cols-3 gap-2"
+        className="rise grid grid-cols-3 gap-2 lg:col-span-2"
         style={{ "--rise-delay": "0.08s" } as React.CSSProperties}
       >
         {LEVELS.map((l) => {
@@ -57,7 +57,7 @@ export default function AcademiaPage() {
 
       {/* Descripción del nivel */}
       <section
-        className="tele-card rise px-5 py-4"
+        className="tele-card rise px-5 py-4 lg:col-span-2"
         style={{ "--rise-delay": "0.16s" } as React.CSSProperties}
       >
         <div className="flex items-center justify-between">
@@ -157,7 +157,11 @@ export default function AcademiaPage() {
       )}
 
       {/* Simulador táctico (nivel 3) */}
-      {selected === 3 && <TacticalSim />}
+      {selected === 3 && (
+        <div className="lg:col-span-2">
+          <TacticalSim />
+        </div>
+      )}
     </main>
   );
 }

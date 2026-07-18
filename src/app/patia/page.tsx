@@ -61,7 +61,7 @@ export default function PatiaPage() {
   };
 
   return (
-    <main className="flex min-h-[calc(100dvh-8rem)] flex-col">
+    <main className="mx-auto flex min-h-[calc(100dvh-8rem)] w-full flex-col lg:min-h-[calc(100dvh-7rem)] lg:max-w-2xl">
       <header className="mb-4 flex items-center gap-3">
         <div className="relative">
           <Image src="/escudo.webp" alt="PatIA" width={40} height={43} />
@@ -130,7 +130,7 @@ export default function PatiaPage() {
           e.preventDefault();
           send(input);
         }}
-        className="sticky bottom-24 flex gap-2"
+        className="sticky bottom-24 flex gap-2 lg:bottom-8"
       >
         <input
           value={input}
