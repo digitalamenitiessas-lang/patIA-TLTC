@@ -82,12 +82,33 @@ export interface Session {
   createdAt: string;
 }
 
+/** Puestos de rugby (los pateadores suelen ser 10, 12, 15… pero patean todos) */
+export const RUGBY_POSITIONS = [
+  "Pilar",
+  "Hooker",
+  "Segunda línea",
+  "Ala",
+  "Octavo",
+  "Medio scrum",
+  "Apertura",
+  "Centro",
+  "Wing",
+  "Fullback",
+] as const;
+
+export type RugbyPosition = (typeof RUGBY_POSITIONS)[number];
+
 export interface PlayerProfile {
   fullName: string;
   division: Division;
   preferredFoot: "derecho" | "izquierdo";
   /** Nivel de la clínica: 1 Fundamentos · 2 Trayectoria C→J · 3 Mental */
   skillLevel: 1 | 2 | 3;
+  /** Ficha de la clínica (onboarding) */
+  dni?: string;
+  position?: RugbyPosition;
+  /** Fecha ISO de aceptación del consentimiento informado */
+  consentAt?: string;
   createdAt: string;
 }
 

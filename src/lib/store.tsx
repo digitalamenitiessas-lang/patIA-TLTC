@@ -141,6 +141,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           division: prof.division,
           preferredFoot: prof.preferred_foot,
           skillLevel: prof.skill_level,
+          dni: prof.dni ?? p.dni,
+          position: prof.position ?? p.position,
+          consentAt: prof.consent_accepted_at ?? p.consentAt,
         }));
         setAccount({
           kind: user.is_anonymous ? "guest" : "google",
@@ -274,6 +277,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             division: next.division,
             preferred_foot: next.preferredFoot,
             skill_level: next.skillLevel,
+            dni: next.dni ?? null,
+            position: next.position ?? null,
+            consent_accepted_at: next.consentAt ?? null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", uid)
