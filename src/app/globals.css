@@ -90,8 +90,8 @@ body {
   100% { transform: translateX(320%) skewX(-12deg); opacity: 0; }
 }
 
-/* El contenido siempre por encima de la atmósfera */
-body > * { position: relative; z-index: 1; }
+/* Nota: nada de reglas globales sin layer sobre body > * — en Tailwind v4
+   pisarían utilidades como .fixed por prioridad de cascade layers. */
 
 /* Grano de película — textura de sala de trofeos (body::before, sin colisión).
    Blend overlay + tile chico: se siente como film, nunca ensucia el color. */
