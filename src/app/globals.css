@@ -93,15 +93,18 @@ body {
 /* El contenido siempre por encima de la atmósfera */
 body > * { position: relative; z-index: 1; }
 
-/* Grano de película — textura de sala de trofeos (body::before, sin colisión) */
+/* Grano de película — textura de sala de trofeos (body::before, sin colisión).
+   Blend overlay + tile chico: se siente como film, nunca ensucia el color. */
 .grain::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 50;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
 }
 
 /* Patrón de cruz de San Andrés reutilizable (bordes de sección, fondos) */
@@ -126,6 +129,18 @@ body > * { position: relative; z-index: 1; }
   box-shadow:
     0 1px 0 rgba(120, 166, 230, 0.08) inset,
     0 18px 40px -24px rgba(3, 6, 14, 0.9);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+@media (hover: hover) {
+  a.tele-card:hover,
+  .tele-card:has(> a):hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 209, 0, 0.28);
+    box-shadow:
+      0 1px 0 rgba(120, 166, 230, 0.1) inset,
+      0 24px 48px -22px rgba(3, 6, 14, 0.95);
+  }
 }
 
 .tele-card-gold {
@@ -264,6 +279,21 @@ body > * { position: relative; z-index: 1; }
 
 /* Scrollbar discreta */
 ::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Selección de texto en los colores del club */
+::selection {
+  background: rgba(255, 209, 0, 0.85);
+  color: #0a1830;
+}
+
+/* Focus visible dorado — accesible y del club */
+:focus-visible {
+  outline: 2px solid rgba(255, 209, 0, 0.7);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+html { scroll-behavior: smooth; }
 
 /* ══════════════════════════════════════════════════════════════
    CONTROLES
