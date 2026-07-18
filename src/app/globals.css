@@ -54,35 +54,18 @@ body {
    ATMÓSFERA — luces de estadio + cruz de San Andrés + grano
    ══════════════════════════════════════════════════════════════ */
 
-/* Resplandor de estadio: mesh royal con brasa dorada, tras el contenido */
+/* Resplandor de estadio: mesh royal + brasa dorada + cruz de San Andrés
+   tenue, todo en el stack de fondo del body (una sola capa, sin colisión) */
 .stadium-glow {
   position: relative;
   background:
     radial-gradient(ellipse 90% 50% at 50% -10%, rgba(9, 68, 137, 0.55), transparent 60%),
-    radial-gradient(ellipse 60% 40% at 88% 6%, rgba(255, 209, 0, 0.09), transparent 65%),
+    radial-gradient(ellipse 60% 40% at 88% 6%, rgba(255, 209, 0, 0.08), transparent 65%),
     radial-gradient(ellipse 70% 50% at 8% 30%, rgba(13, 87, 173, 0.16), transparent 70%),
+    linear-gradient(45deg, transparent 47.8%, rgba(61, 127, 217, 0.05) 47.8% 52.2%, transparent 52.2%),
+    linear-gradient(-45deg, transparent 47.8%, rgba(255, 209, 0, 0.022) 47.8% 52.2%, transparent 52.2%),
     var(--color-pitch-950);
-}
-
-/* Cruz de San Andrés gigante, tenue, respirando detrás de todo */
-.stadium-glow::before {
-  content: "";
-  position: fixed;
-  inset: -20% -10%;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(45deg, transparent 47.6%, rgba(61, 127, 217, 0.06) 47.6% 52.4%, transparent 52.4%),
-    linear-gradient(-45deg, transparent 47.6%, rgba(61, 127, 217, 0.06) 47.6% 52.4%, transparent 52.4%);
-  background-size: 100% 100%;
-  background-position: center;
-  background-repeat: no-repeat;
-  animation: saltire-breathe 14s ease-in-out infinite;
-}
-
-@keyframes saltire-breathe {
-  0%, 100% { opacity: 0.5; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.04); }
+  background-attachment: fixed;
 }
 
 /* Barrido de luz de estadio que cruza lentamente la parte superior */
@@ -95,8 +78,8 @@ body {
   height: 42%;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent, rgba(255, 209, 0, 0.05), transparent);
-  filter: blur(24px);
+  background: linear-gradient(100deg, transparent, rgba(255, 209, 0, 0.06), transparent);
+  filter: blur(28px);
   animation: stadium-sweep 11s ease-in-out infinite;
 }
 
@@ -110,7 +93,7 @@ body {
 /* El contenido siempre por encima de la atmósfera */
 body > * { position: relative; z-index: 1; }
 
-/* Grano de película — textura de sala de trofeos */
+/* Grano de película — textura de sala de trofeos (body::before, sin colisión) */
 .grain::before {
   content: "";
   position: fixed;
