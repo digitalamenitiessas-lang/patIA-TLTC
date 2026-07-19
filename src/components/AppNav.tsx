@@ -23,11 +23,12 @@ const ICONS = {
   ),
 } as const;
 
-/** Barra inferior móvil: 5 lugares — el resto vive en la sidebar y en Inicio */
+/** Barra inferior móvil: Cargar es el botón central; Stats vive en Inicio y sidebar */
 const MOBILE_TABS = [
   { href: "/", label: "Inicio", icon: ICONS.inicio },
   { href: "/clinica", label: "Clínica", icon: ICONS.clinica },
   { href: "/cargar", label: "Cargar", icon: null }, // botón central especial
+  { href: "/academia", label: "Academia", icon: ICONS.academia },
   { href: "/ranking", label: "Ranking", icon: ICONS.ranking },
   { href: "/patia", label: "PatIA", icon: ICONS.patia },
 ];
@@ -208,7 +209,7 @@ export function AppNav() {
 
       {/* ── Barra inferior móvil ──────────────────────────────── */}
       <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 lg:hidden">
-        <div className="saltire-weave mx-4 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/20 bg-pitch-900/92 px-3 pt-2 pb-2 shadow-[0_-10px_44px_rgba(3,6,14,0.92)] backdrop-blur-xl">
+        <div className="saltire-weave mx-3 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/20 bg-pitch-900/92 px-1.5 pt-2 pb-2 shadow-[0_-10px_44px_rgba(3,6,14,0.92)] backdrop-blur-xl">
           {MOBILE_TABS.map((tab) => {
             const active = isActive(pathname, tab.href);
 
@@ -218,7 +219,7 @@ export function AppNav() {
                   key={tab.href}
                   href={tab.href}
                   aria-label="Cargar sesión"
-                  className="relative -mt-8 flex h-16 w-16 flex-col items-center justify-center"
+                  className="relative -mt-8 flex h-16 w-16 shrink-0 flex-col items-center justify-center"
                 >
                   {/* Halo dorado pulsante */}
                   <span className="absolute inset-0 rounded-full bg-gold-400/25 blur-md" />
@@ -233,12 +234,12 @@ export function AppNav() {
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
+                className={`relative flex min-w-0 flex-1 flex-col items-center gap-1 rounded-xl py-1.5 transition-colors ${
                   active ? "text-gold-400" : "text-chalk-dim hover:text-chalk"
                 }`}
               >
                 {active && (
-                  <span className="absolute top-0 h-0.5 w-6 rounded-full bg-gold-400 shadow-[0_0_8px_rgba(255,209,0,0.6)]" />
+                  <span className="absolute top-0 h-0.5 w-5 rounded-full bg-gold-400 shadow-[0_0_8px_rgba(255,209,0,0.6)]" />
                 )}
                 <svg
                   viewBox="0 0 24 24"
@@ -252,7 +253,7 @@ export function AppNav() {
                   {tab.icon}
                 </svg>
                 <span
-                  className={`font-mono text-[9px] tracking-[0.12em] uppercase ${
+                  className={`font-mono text-[8px] tracking-[0.06em] uppercase ${
                     active ? "text-gold-400" : ""
                   }`}
                 >
