@@ -79,6 +79,10 @@ export interface Session {
   mentalNote: string;
   /** Confianza post-sesión 1–5 */
   confidence: number | null;
+  /** Predio del club donde se pateó (el_salvador | sede) */
+  venue?: string | null;
+  /** true si el GPS confirmó que estaba en el predio */
+  venueVerified?: boolean;
   createdAt: string;
 }
 

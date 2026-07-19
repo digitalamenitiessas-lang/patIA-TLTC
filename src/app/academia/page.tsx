@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { usePlayer } from "@/lib/store";
-import { LEVELS, DRILLS, VIDEO_SEARCHES } from "@/lib/drills";
+import { LEVELS, DRILLS, VIDEOS, type VideoDef } from "@/lib/drills";
+import { buildSummary } from "@/lib/coach";
 
 export default function AcademiaPage() {
   const { profile, updateProfile } = usePlayer();
   const [selected, setSelected] = useState<1 | 2 | 3>(profile.skillLevel);
 
   const drills = DRILLS.filter((d) => d.level === selected);
-  const videos = VIDEO_SEARCHES.filter((v) => v.level === selected);
+  const videos = VIDEOS.filter((v) => v.level === selected);
   const level = LEVELS[selected - 1];
 
   return (
@@ -123,35 +124,19 @@ export default function AcademiaPage() {
         ))}
       </section>
 
-      {/* Banco de video */}
+      {/* Banco de video embebido */}
       {videos.length > 0 && (
         <section className="rise flex flex-col gap-2.5" style={{ "--rise-delay": "0.32s" } as React.CSSProperties}>
-          <p className="tech-label px-1">Banco de video</p>
+          <p className="tech-label px-1">
+            Banco de video · Nivel {selected} · {videos.length}{" "}
+            {videos.length === 1 ? "video" : "videos"}
+          </p>
           {videos.map((v) => (
-            <a
-              key={v.id}
-              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(v.query)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tele-card flex items-center gap-3 px-4 py-3.5"
-            >
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-miss-500/15">
-                <svg viewBox="0 0 24 24" className="ml-0.5 h-5 w-5 text-miss-500" fill="currentColor">
-                  <path d="M8 5.5v13l11-6.5-11-6.5Z" />
-                </svg>
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium text-chalk">{v.title}</span>
-                <span className="mt-0.5 block text-[11px] text-chalk-dim">{v.note}</span>
-              </span>
-              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-chalk-faint" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M7 17 17 7M9 7h8v8" />
-              </svg>
-            </a>
+            <VideoCard key={v.youtubeId} video={v} />
           ))}
           <p className="px-1 text-[10px] text-chalk-faint">
-            Cuando la clínica suba sus videos al canal de YouTube del club, se embeben acá
-            automáticamente según tu nivel.
+            Los videos se ven acá adentro, sin salir de la app. Tocá uno y
+            preguntale a PatIA lo que no te cierre de la técnica.
           </p>
         </section>
       )}
@@ -163,6 +148,154 @@ export default function AcademiaPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Video técnico embebido: thumbnail → reproductor adentro de la app,
+ * con consulta directa a PatIA sobre la técnica del video.
+ */
+function VideoCard({ video }: { video: VideoDef }) {
+  const { stats } = usePlayer();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [qa, setQa] = useState<{ q: string; a: string } | null>(null);
+  const [thinking, setThinking] = useState(false);
+
+  const ask = async () => {
+    const clean = q.trim();
+    if (!clean || thinking) return;
+    setThinking(true);
+    setQ("");
+    setQa({ q: clean, a: "" });
+    try {
+      const res = await fetch("/api/patia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Estoy viendo el video "${video.title}" del banco de la Academia. De qué trata: ${video.note}. Mi pregunta sobre esta técnica: ${clean}`,
+          summary: buildSummary(stats),
+          history: [],
+        }),
+      });
+      const data = await res.json();
+      setQa({
+        q: clean,
+        a: data.text ?? "No pude responder ahora. Probá de nuevo en un rato.",
+      });
+    } catch {
+      setQa({
+        q: clean,
+        a: "Sin conexión con PatIA — probá de nuevo cuando tengas señal.",
+      });
+    } finally {
+      setThinking(false);
+    }
+  };
+
+  return (
+    <article className="tele-card overflow-hidden">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="group flex w-full items-center gap-3 px-4 py-3.5 text-left"
+        >
+          <span className="relative h-14 w-24 shrink-0 overflow-hidden rounded-lg border border-navy-300/20 bg-pitch-950">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`https://i.ytimg.com/vi/${video.youtubeId}/hqdefault.jpg`}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-cover opacity-80 transition-opacity group-hover:opacity-100"
+            />
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gold-400 shadow-[0_0_14px_rgba(255,209,0,0.5)]">
+                <svg viewBox="0 0 24 24" className="ml-0.5 h-3.5 w-3.5 text-pitch-950" fill="currentColor">
+                  <path d="M8 5.5v13l11-6.5-11-6.5Z" />
+                </svg>
+              </span>
+            </span>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-chalk">{video.title}</span>
+            <span className="mt-0.5 line-clamp-2 block text-[11px] text-chalk-dim">
+              {video.note}
+            </span>
+          </span>
+        </button>
+      ) : (
+        <div className="flex flex-col">
+          <div className="relative aspect-video w-full overflow-hidden bg-black">
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${video.youtubeId}?rel=0&modestbranding=1`}
+              title={video.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="absolute top-0 left-0 h-full w-full"
+            />
+          </div>
+          <div className="px-4 pt-3 pb-4">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-chalk">{video.title}</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-chalk-dim">
+                  {video.note}
+                </p>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Cerrar video"
+                className="shrink-0 rounded-lg border border-navy-300/25 px-2 py-1 font-mono text-[10px] text-chalk-faint uppercase hover:text-chalk"
+              >
+                cerrar
+              </button>
+            </div>
+
+            {/* Consulta a PatIA sobre este video */}
+            <div className="mt-3 rounded-xl border border-gold-400/20 bg-pitch-950/50 px-3.5 py-3">
+              <p className="tech-label mb-2">🤖 Preguntale a PatIA sobre este video</p>
+              {qa && (
+                <div className="mb-2.5 flex flex-col gap-1.5">
+                  <p className="self-end rounded-xl rounded-br-md bg-navy-500/50 px-3 py-1.5 text-xs text-chalk">
+                    {qa.q}
+                  </p>
+                  {thinking ? (
+                    <p className="self-start text-xs text-chalk-faint">
+                      PatIA está mirando el video… ◌
+                    </p>
+                  ) : (
+                    <p className="self-start rounded-xl rounded-bl-md border border-navy-300/15 bg-pitch-800/70 px-3 py-2 text-xs leading-relaxed text-chalk-dim">
+                      {qa.a}
+                    </p>
+                  )}
+                </div>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void ask();
+                }}
+                className="flex gap-1.5"
+              >
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="¿Cómo aplico esto a mi patada?"
+                  className="min-w-0 flex-1 rounded-lg border border-navy-300/20 bg-pitch-800 px-3 py-2 text-xs text-chalk placeholder:text-chalk-faint focus:border-gold-400/50 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={!q.trim() || thinking}
+                  className="btn-gold rounded-lg px-3.5 font-mono text-[10px] font-bold tracking-wider uppercase disabled:opacity-40"
+                >
+                  Enviar
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
   );
 }
 

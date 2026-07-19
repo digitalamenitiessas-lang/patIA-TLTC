@@ -130,30 +130,89 @@ export const DRILLS: DrillDef[] = [
 ];
 
 /**
- * Banco de video de la clínica. Cuando el club cargue videos en su canal
- * de YouTube quedan indexados en la tabla youtube_video_mirror y se
- * embeben acá. Mientras tanto se ofrecen búsquedas curadas.
+ * Banco de video de la clínica: catálogo curado, embebido en la app
+ * (sin salir a YouTube). Espejado en la tabla youtube_video_mirror.
  */
-export const VIDEO_SEARCHES = [
+export interface VideoDef {
+  youtubeId: string;
+  title: string;
+  note: string;
+  level: 1 | 2 | 3;
+  category: "biomecanica" | "rutina_mental" | "drop_kick" | "salida_22";
+}
+
+export const VIDEOS: VideoDef[] = [
+  // ─── Nivel 1: Fundamentos biomecánicos ───
   {
-    id: "v1",
-    query: "jonny wilkinson kicking technique dave alred",
-    title: "Jonny Wilkinson: técnica de conversión",
+    youtubeId: "WfrrD9BbW70",
+    title: "Principio biomecánico C to J — Dave Alred",
+    note: "Cómo pasar del swing lateral en C al swing lineal en J: toda la energía y el torso viajan hacia el objetivo.",
     level: 1,
-    note: "El alumno más famoso de Dave Alred: mirá la posición del pie de apoyo y las manos.",
+    category: "biomecanica",
   },
   {
-    id: "v2",
-    query: "C to J rugby kicking technique",
-    title: "C to J: cómo cambiar el swing",
+    youtubeId: "Ye4qvxqJYLc",
+    title: "Fuerza y estructura en la patada J-Shape",
+    note: "Potencia controlada usando el torso y la inercia del cuerpo, sin sobrecargar la pierna. Ideal para practicar fuera de la cancha.",
+    level: 1,
+    category: "biomecanica",
+  },
+  {
+    youtubeId: "968A8IduTKg",
+    title: "The Walking Kick — el paso básico",
+    note: "Caminando y a baja intensidad: contacto con el sweet spot y colocación del pie de apoyo antes de sumar carrera.",
+    level: 1,
+    category: "biomecanica",
+  },
+  // ─── Nivel 2: Técnicas específicas ───
+  {
+    youtubeId: "Jv2KySTvlpM",
+    title: "Punt: 3 consejos de colocación y suelta",
+    note: "Suelta con una sola mano para evitar desvíos por viento y follow-through de cadera hacia el campo.",
     level: 2,
-    note: "El concepto central del Nivel 2 explicado con ejemplos de elite.",
+    category: "biomecanica",
   },
   {
-    id: "v3",
-    query: "rugby goal kicking pre kick routine pressure",
-    title: "Rutina mental de pre-pateo",
+    youtubeId: "XIPSbiXDMG8",
+    title: "Drop kick (botepronto / salidas)",
+    note: "El ritmo exacto: suelta idéntica, rebote balanceado e impacto en el momento justo para altura y consistencia.",
+    level: 2,
+    category: "drop_kick",
+  },
+  {
+    youtubeId: "mdTZf34a0TQ",
+    title: "Grubber: la patada al rastrón",
+    note: "Impacto en el tercio superior y el pie 'volcando' por encima: la pelota rueda de punta impredecible para la defensa.",
+    level: 2,
+    category: "biomecanica",
+  },
+  // ─── Nivel 3: Rutinas y destrezas avanzadas ───
+  {
+    youtubeId: "cKUOO9H5-cA",
+    title: "Goal kicking completo: del tee al follow-through",
+    note: "Elección del tee, alineación visual, pasos de aproximación y rutina mental bajo presión, paso a paso.",
     level: 3,
-    note: "Cómo construir una rutina que aguante la presión del partido.",
+    category: "rutina_mental",
+  },
+  {
+    youtubeId: "TVIyZeWIDBM",
+    title: "Spiral kick: la patada en espiral",
+    note: "Costuras a las 11 y las 5 del reloj e impacto en el centro de la pelota para un vuelo que corta el viento.",
+    level: 3,
+    category: "biomecanica",
+  },
+  {
+    youtubeId: "MAH6vN1k2AY",
+    title: "Balance y follow-through en espiral",
+    note: "Disparadores físicos para transferir toda la potencia terminando en equilibrio total.",
+    level: 3,
+    category: "biomecanica",
+  },
+  {
+    youtubeId: "cNZYDJUmNc0",
+    title: "Práctica en parejas: drills combinados",
+    note: "Drop punts, drop shunts y espirales en movimiento continuo: recepción, transición de manos a pies y velocidad.",
+    level: 3,
+    category: "biomecanica",
   },
 ];

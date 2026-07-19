@@ -25,9 +25,34 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pat-ia-tltc.vercel.app"),
   title: "PatIA · Lawn Tennis",
   description:
     "Clínica de Pateadores Daniel Tejerizo — Tucumán Lawn Tennis Club. Telemetría, técnica y progresión para pateadores en formación.",
+  openGraph: {
+    title: "PatIA · Clínica de Pateadores TLTC",
+    description:
+      "Telemetría, técnica y progresión para pateadores en formación. Tucumán Lawn Tennis Club · est. 1902.",
+    url: "https://pat-ia-tltc.vercel.app",
+    siteName: "PatIA",
+    locale: "es_AR",
+    type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "PatIA — Clínica de Pateadores del Tucumán Lawn Tennis Club",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PatIA · Clínica de Pateadores TLTC",
+    description:
+      "Telemetría, técnica y progresión para pateadores en formación.",
+    images: ["/og.png"],
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

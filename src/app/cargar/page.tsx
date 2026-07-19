@@ -19,6 +19,8 @@ import {
 } from "@/lib/field";
 import { usePlayer } from "@/lib/store";
 import { sessionXp } from "@/lib/gamification";
+import { checkIn, type CheckinStatus } from "@/lib/geo";
+import { checkIn, type CheckinStatus } from "@/lib/geo";
 import type {
   FieldMode,
   Kick,
@@ -87,6 +89,12 @@ export default function CargarPage() {
   const [windDir, setWindDir] = useState<WindDirection>("calma");
   const [confidence, setConfidence] = useState(3);
   const [note, setNote] = useState("");
+  const [checkin, setCheckin] = useState<CheckinStatus>({ state: "idle" });
+
+  const doCheckIn = async () => {
+    setCheckin({ state: "locating" });
+    setCheckin(await checkIn());
+  };
 
   const clearPending = () => {
     setOrigin(null);
@@ -187,6 +195,8 @@ export default function CargarPage() {
       windDirection: windDir,
       mentalNote: note,
       confidence,
+      venue: checkin.state === "verified" ? checkin.venueId : null,
+      venueVerified: checkin.state === "verified",
       createdAt: new Date().toISOString(),
     };
     addSession(session);
@@ -552,6 +562,41 @@ export default function CargarPage() {
                     ⭐
                   </button>
                 ))}
+              </div>
+
+              <label className="tech-label">¿Estás en el club?</label>
+              <div className="mt-1 mb-3">
+                {checkin.state === "verified" ? (
+                  <p className="flex items-center gap-2 rounded-xl border border-try-500/40 bg-try-500/10 px-3.5 py-2.5 text-xs text-try-400">
+                    📍 Verificado: estás en {checkin.venueName}
+                    <span className="text-chalk-faint">
+                      (a {checkin.distanceM} m del centro del predio)
+                    </span>
+                  </p>
+                ) : checkin.state === "far" ? (
+                  <p className="rounded-xl border border-navy-300/20 bg-pitch-800 px-3.5 py-2.5 text-xs text-chalk-dim">
+                    Estás a{" "}
+                    {checkin.distanceM >= 1000
+                      ? `${(checkin.distanceM / 1000).toFixed(1)} km`
+                      : `${checkin.distanceM} m`}{" "}
+                    de {checkin.venueName} — la sesión se guarda sin marca de club.
+                  </p>
+                ) : checkin.state === "denied" ? (
+                  <p className="rounded-xl border border-navy-300/20 bg-pitch-800 px-3.5 py-2.5 text-xs text-chalk-dim">
+                    Sin permiso de ubicación — habilitalo en el navegador si querés
+                    la marca 📍 del club.
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => void doCheckIn()}
+                    disabled={checkin.state === "locating"}
+                    className="w-full rounded-xl border border-gold-400/40 bg-gold-400/10 py-2.5 font-mono text-[11px] tracking-wider text-gold-300 uppercase disabled:opacity-50"
+                  >
+                    {checkin.state === "locating"
+                      ? "◌ Ubicando…"
+                      : "📍 Marcar que estoy en el Lawn Tennis"}
+                  </button>
+                )}
               </div>
 
               <label className="tech-label">Diario mental (opcional)</label>

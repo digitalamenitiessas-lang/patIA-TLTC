@@ -22,6 +22,7 @@ import {
   POSTS_GAP,
 } from "@/lib/field";
 import { EffRing } from "@/components/EffRing";
+import { VENUE_NAMES } from "@/lib/geo";
 import type { FieldMode, Kick, Session } from "@/lib/types";
 
 const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -570,6 +571,14 @@ function SessionCard({ session: s, prev }: { session: Session; prev?: Session })
             {s.confidence !== null && (
               <p className="tech-label">
                 confianza <span className="text-gold-300">{"⭐".repeat(s.confidence)}</span>
+              </p>
+            )}
+            {s.venueVerified && s.venue && (
+              <p className="tech-label">
+                📍{" "}
+                <span className="text-try-400">
+                  {VENUE_NAMES[s.venue] ?? s.venue} ✓
+                </span>
               </p>
             )}
           </div>
