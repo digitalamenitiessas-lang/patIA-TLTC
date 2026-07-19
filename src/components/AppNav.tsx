@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { usePlayer } from "@/lib/store";
+import { useTour } from "@/lib/tour";
 
 const ICONS = {
   inicio: <path d="M3 11.5 12 4l9 7.5M5.5 10v9.5h4.5V14h4v5.5h4.5V10" />,
@@ -64,6 +65,7 @@ function isActive(pathname: string, href: string) {
 export function AppNav() {
   const pathname = usePathname();
   const { account, cloud } = usePlayer();
+  const { show: showTour } = useTour();
 
   return (
     <>
@@ -183,7 +185,18 @@ export function AppNav() {
               Perfil
             </span>
           </Link>
-          <p className="tech-label mt-3">
+          <button
+            onClick={showTour}
+            className="mt-3 flex items-center gap-2 text-chalk-faint transition-colors hover:text-gold-300"
+          >
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-navy-300/35 font-mono text-[10px]">
+              ?
+            </span>
+            <span className="font-mono text-[10px] tracking-[0.14em] uppercase">
+              Cómo funciona
+            </span>
+          </button>
+          <p className="tech-label mt-2">
             {cloud === "online"
               ? "● nube sincronizada"
               : cloud === "syncing"
@@ -250,6 +263,15 @@ export function AppNav() {
           })}
         </div>
       </nav>
+
+      {/* ── Botón flotante de ayuda (móvil) ───────────────────── */}
+      <button
+        onClick={showTour}
+        aria-label="Cómo funciona PatIA"
+        className="fixed right-4 bottom-32 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-gold-400/35 bg-pitch-900/85 font-mono text-sm text-gold-300 shadow-[0_4px_18px_rgba(3,6,14,0.6)] backdrop-blur-lg lg:hidden"
+      >
+        ?
+      </button>
     </>
   );
 }

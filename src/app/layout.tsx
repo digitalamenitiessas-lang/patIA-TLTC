@@ -4,7 +4,9 @@ import "./globals.css";
 import { AppNav } from "@/components/AppNav";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { Onboarding } from "@/components/Onboarding";
+import { ProductTour } from "@/components/ProductTour";
 import { PlayerProvider } from "@/lib/store";
+import { TourProvider } from "@/lib/tour";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -57,14 +59,17 @@ export default function RootLayout({
     >
       <body className="grain stadium-glow min-h-dvh">
         <PlayerProvider>
-          <AppNav />
-          <div className="lg:pl-60">
-            <div className="mx-auto min-h-dvh w-full max-w-md px-4 pt-6 pb-28 lg:max-w-3xl lg:px-8 lg:pt-10 lg:pb-16 xl:max-w-4xl">
-              <ApprovalGate>
-                <Onboarding>{children}</Onboarding>
-              </ApprovalGate>
+          <TourProvider>
+            <AppNav />
+            <div className="lg:pl-60">
+              <div className="mx-auto min-h-dvh w-full max-w-md px-4 pt-6 pb-28 lg:max-w-3xl lg:px-8 lg:pt-10 lg:pb-16 xl:max-w-4xl">
+                <ApprovalGate>
+                  <Onboarding>{children}</Onboarding>
+                </ApprovalGate>
+              </div>
             </div>
-          </div>
+            <ProductTour />
+          </TourProvider>
         </PlayerProvider>
       </body>
     </html>
