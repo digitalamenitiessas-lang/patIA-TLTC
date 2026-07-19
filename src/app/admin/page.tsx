@@ -14,6 +14,8 @@ interface Row {
   role: string;
   approval_status: "pending" | "approved" | "rejected";
   created_at: string;
+  dni: string | null;
+  position: string | null;
   is_anonymous?: boolean;
 }
 
@@ -29,7 +31,7 @@ export default function AdminPage() {
     const { data } = await supabase
       .from("player_profiles")
       .select(
-        "id, full_name, email, avatar_url, division, role, approval_status, created_at",
+        "id, full_name, email, avatar_url, division, role, approval_status, created_at, dni, position",
       )
       .order("created_at", { ascending: false });
     setRows((data as Row[]) ?? []);
@@ -137,6 +139,8 @@ export default function AdminPage() {
                       day: "numeric",
                       month: "short",
                     })}
+                    {r.dni ? ` · DNI ${r.dni}` : ""}
+                    {r.position ? ` · ${r.position}` : ""}
                   </p>
                 </div>
               </div>
@@ -184,6 +188,8 @@ export default function AdminPage() {
                 </p>
                 <p className="truncate text-[11px] text-chalk-dim">
                   {r.email ?? "invitado anónimo"} · {r.division}
+                  {r.position ? ` · ${r.position}` : ""}
+                  {r.dni ? ` · DNI ${r.dni}` : ""}
                 </p>
               </div>
               {r.approval_status === "rejected" ? (

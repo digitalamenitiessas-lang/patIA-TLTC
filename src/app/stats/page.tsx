@@ -12,9 +12,17 @@ import {
   CartesianGrid,
 } from "recharts";
 import { usePlayer } from "@/lib/store";
-import { zoneOf, ZONE_LABELS, GOAL_CATEGORIES, MODE_OF, MODE_SPECS } from "@/lib/field";
+import {
+  zoneOf,
+  ZONE_LABELS,
+  GOAL_CATEGORIES,
+  MODE_OF,
+  MODE_SPECS,
+  POSTS_X,
+  POSTS_GAP,
+} from "@/lib/field";
 import { EffRing } from "@/components/EffRing";
-import type { FieldMode } from "@/lib/types";
+import type { FieldMode, Kick, Session } from "@/lib/types";
 
 const DAY_LABELS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -88,6 +96,28 @@ export default function StatsPage() {
     ? Math.max(...goalMade.map((k) => k.distance))
     : 0;
 
+  // Autocompetencia: tu último bloque de sesiones vs el anterior
+  const progreso = useMemo(() => {
+    if (sessions.length < 4) return null;
+    const half = Math.min(5, Math.floor(sessions.length / 2));
+    const calc = (list: Session[]) => {
+      const ks = list.flatMap((s) => s.kicks);
+      const m = ks.filter((k) => k.isMade).length;
+      return {
+        eff: ks.length ? Math.round((m / ks.length) * 100) : 0,
+        vol: list.length ? Math.round(ks.length / list.length) : 0,
+        effort: ks.length
+          ? Math.round(ks.reduce((a, k) => a + k.effortPct, 0) / ks.length)
+          : 0,
+      };
+    };
+    return {
+      n: half,
+      recent: calc(sessions.slice(0, half)),
+      prev: calc(sessions.slice(half, half * 2)),
+    };
+  }, [sessions]);
+
   // Juego territorial: salidas, touch y rastrones
   const territorial = useMemo(() => {
     const modes: FieldMode[] = ["salida", "touch", "rastron"];
@@ -158,6 +188,46 @@ export default function StatsPage() {
               </div>
             </div>
           </section>
+
+          {/* Autocompetencia: vos contra vos */}
+          {progreso && (
+            <section
+              className="tele-card-gold rise px-5 py-4 lg:col-span-2"
+              style={{ "--rise-delay": "0.12s" } as React.CSSProperties}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <p className="tech-label">Vos contra vos</p>
+                <p className="tech-label">
+                  últimas {progreso.n} vs {progreso.n} anteriores
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <ProgressStat
+                  label="Efectividad"
+                  prev={progreso.prev.eff}
+                  next={progreso.recent.eff}
+                  unit="%"
+                  upIsGood
+                />
+                <ProgressStat
+                  label="Patadas / sesión"
+                  prev={progreso.prev.vol}
+                  next={progreso.recent.vol}
+                  upIsGood
+                />
+                <ProgressStat
+                  label="Esfuerzo prom."
+                  prev={progreso.prev.effort}
+                  next={progreso.recent.effort}
+                  unit="%"
+                  upIsGood={false}
+                />
+              </div>
+              <p className="mt-3 text-center text-[11px] text-chalk-faint">
+                La primera competencia es contra tu propia versión anterior.
+              </p>
+            </section>
+          )}
 
           {/* Evolución 14 días */}
           <section
@@ -288,42 +358,230 @@ export default function StatsPage() {
             </section>
           )}
 
-          {/* Historial */}
+          {/* Historial: cada sesión con fecha, mapa y detalle */}
           <section className="rise lg:col-span-2" style={{ "--rise-delay": "0.4s" } as React.CSSProperties}>
-            <p className="tech-label mb-2 px-1">Historial de sesiones</p>
-            <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2">
-              {sessions.slice(0, 10).map((s) => {
-                const m = s.kicks.filter((k) => k.isMade).length;
-                const e = s.kicks.length ? Math.round((m / s.kicks.length) * 100) : 0;
-                return (
-                  <div key={s.id} className="tele-card flex items-center gap-3 px-4 py-3">
-                    <div className="flex-1">
-                      <p className="tele-num text-sm text-chalk">
-                        {new Date(s.date + "T12:00:00").toLocaleDateString("es-AR", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </p>
-                      <p className="tech-label">
-                        {s.kicks.length} patadas
-                        {s.rpe ? ` · RPE ${s.rpe}` : ""}
-                        {s.windDirection !== "calma" ? ` · viento ${s.windKmh} km/h` : ""}
-                      </p>
-                    </div>
-                    <p
-                      className={`tele-num text-lg font-semibold ${e >= 70 ? "text-try-400" : e >= 50 ? "text-gold-400" : "text-miss-500"}`}
-                    >
-                      {e}%
-                    </p>
-                  </div>
-                );
-              })}
+            <p className="tech-label mb-2 px-1">
+              Historial de sesiones · tocá una para ver el detalle
+            </p>
+            <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:items-start">
+              {sessions.slice(0, 20).map((s, i) => (
+                <SessionCard key={s.id} session={s} prev={sessions[i + 1]} />
+              ))}
             </div>
           </section>
         </>
       )}
     </main>
+  );
+}
+
+/** Métrica de autocompetencia con flecha de tendencia */
+function ProgressStat({
+  label,
+  prev,
+  next,
+  unit = "",
+  upIsGood,
+}: {
+  label: string;
+  prev: number;
+  next: number;
+  unit?: string;
+  upIsGood: boolean;
+}) {
+  const delta = next - prev;
+  const improved = delta === 0 ? null : upIsGood ? delta > 0 : delta < 0;
+  const color =
+    improved === null
+      ? "text-chalk-dim"
+      : improved
+        ? "text-try-400"
+        : "text-miss-500";
+  return (
+    <div className="rounded-xl bg-pitch-950/40 px-3 py-2.5 text-center">
+      <p className="tele-num text-2xl font-semibold text-chalk">
+        {next}
+        <span className="text-xs text-chalk-dim">{unit}</span>
+      </p>
+      <p className={`tele-num text-[11px] font-semibold ${color}`}>
+        {delta === 0 ? "= igual" : `${delta > 0 ? "▲" : "▼"} ${Math.abs(delta)}${unit}`}
+        <span className="text-chalk-faint"> · antes {prev}{unit}</span>
+      </p>
+      <p className="tech-label mt-0.5">{label}</p>
+    </div>
+  );
+}
+
+/** Mini-mapa de la media cancha con los orígenes de las patadas a los palos */
+function MiniField({ kicks }: { kicks: Kick[] }) {
+  const gx = POSTS_X - POSTS_GAP / 2;
+  return (
+    <svg
+      viewBox="0 0 70 50"
+      className="w-full rounded-xl border border-navy-300/15"
+      style={{
+        background: "linear-gradient(180deg, rgba(6,30,20,0.9), rgba(5,16,12,0.95))",
+      }}
+    >
+      <line x1="0" y1="1.5" x2="70" y2="1.5" stroke="#eef2fa" strokeWidth="0.5" opacity="0.8" />
+      <line x1="0" y1="23.5" x2="70" y2="23.5" stroke="#eef2fa" strokeWidth="0.3" opacity="0.45" />
+      <text x="1.8" y="22.4" fill="#eef2fa" opacity="0.4" fontSize="2.4" fontFamily="monospace">22</text>
+      <line x1="0" y1="49.7" x2="70" y2="49.7" stroke="#eef2fa" strokeWidth="0.5" opacity="0.5" />
+      <g>
+        <line x1={gx} y1="0" x2={gx} y2="3" stroke="#ffd100" strokeWidth="0.8" strokeLinecap="round" />
+        <line x1={gx + POSTS_GAP} y1="0" x2={gx + POSTS_GAP} y2="3" stroke="#ffd100" strokeWidth="0.8" strokeLinecap="round" />
+        <line x1={gx} y1="1.5" x2={gx + POSTS_GAP} y2="1.5" stroke="#ffd100" strokeWidth="0.6" />
+      </g>
+      {kicks.map((k) =>
+        k.isMade ? (
+          <circle key={k.id} cx={k.x} cy={k.y} r="1.2" fill="#10b981" opacity="0.9" stroke="#03060e" strokeWidth="0.2" />
+        ) : (
+          <g key={k.id} stroke="#f0464b" strokeWidth="0.45" opacity="0.9" strokeLinecap="round">
+            <line x1={k.x - 0.9} y1={k.y - 0.9} x2={k.x + 0.9} y2={k.y + 0.9} />
+            <line x1={k.x - 0.9} y1={k.y + 0.9} x2={k.x + 0.9} y2={k.y - 0.9} />
+          </g>
+        ),
+      )}
+    </svg>
+  );
+}
+
+const WIND_LABELS: Record<string, string> = {
+  calma: "calma",
+  a_favor: "a favor",
+  en_contra: "en contra",
+  cruzado_izq: "cruzado ←",
+  cruzado_der: "cruzado →",
+};
+
+/** Sesión del historial, expandible con mapa y condiciones */
+function SessionCard({ session: s, prev }: { session: Session; prev?: Session }) {
+  const [open, setOpen] = useState(false);
+  const m = s.kicks.filter((k) => k.isMade).length;
+  const e = s.kicks.length ? Math.round((m / s.kicks.length) * 100) : 0;
+
+  const prevMade = prev?.kicks.filter((k) => k.isMade).length ?? 0;
+  const prevEff = prev && prev.kicks.length ? Math.round((prevMade / prev.kicks.length) * 100) : null;
+  const delta = prevEff !== null ? e - prevEff : null;
+
+  const goalKicks = s.kicks.filter((k) => GOAL_CATEGORIES.includes(k.category));
+
+  const modeChips = (["palos", "salida", "touch", "rastron"] as FieldMode[])
+    .map((mode) => {
+      const ks = s.kicks.filter((k) => MODE_OF[k.category] === mode);
+      if (!ks.length) return null;
+      const ok = ks.filter((k) => k.isMade).length;
+      const meters = ks.filter((k) => k.metersGained !== undefined);
+      const avg = meters.length
+        ? Math.round(meters.reduce((a, k) => a + (k.metersGained ?? 0), 0) / meters.length)
+        : null;
+      return {
+        mode,
+        text: `${MODE_SPECS[mode].name} ${ok}/${ks.length}${avg !== null ? ` · ${avg}m` : ""}`,
+      };
+    })
+    .filter(Boolean) as { mode: FieldMode; text: string }[];
+
+  return (
+    <div className="tele-card overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <div className="flex-1">
+          <p className="tele-num text-sm text-chalk capitalize">
+            {new Date(s.date + "T12:00:00").toLocaleDateString("es-AR", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+            })}
+          </p>
+          <p className="tech-label">
+            {s.kicks.length} patadas
+            {s.rpe ? ` · RPE ${s.rpe}` : ""}
+            {s.windDirection !== "calma" ? ` · viento ${s.windKmh} km/h` : ""}
+          </p>
+        </div>
+        {delta !== null && delta !== 0 && (
+          <span
+            className={`tele-num rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+              delta > 0
+                ? "bg-try-500/15 text-try-400"
+                : "bg-miss-500/15 text-miss-500"
+            }`}
+          >
+            {delta > 0 ? "▲" : "▼"} {Math.abs(delta)} pts
+          </span>
+        )}
+        <p
+          className={`tele-num text-lg font-semibold ${e >= 70 ? "text-try-400" : e >= 50 ? "text-gold-400" : "text-miss-500"}`}
+        >
+          {e}%
+        </p>
+        <svg
+          viewBox="0 0 24 24"
+          className={`h-4 w-4 shrink-0 text-chalk-faint transition-transform ${open ? "rotate-90" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+        >
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="border-t border-navy-300/12 px-4 pt-3 pb-4">
+          {goalKicks.length > 0 && (
+            <div className="mb-3">
+              <p className="tech-label mb-1.5">
+                Desde dónde pateaste a los palos · {goalKicks.filter((k) => k.isMade).length}/{goalKicks.length}
+              </p>
+              <MiniField kicks={goalKicks} />
+            </div>
+          )}
+
+          {modeChips.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {modeChips.map((c) => (
+                <span
+                  key={c.mode}
+                  className="rounded-full border border-navy-300/20 bg-pitch-950/40 px-2.5 py-1 font-mono text-[10px] text-chalk-dim"
+                >
+                  {c.text}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {s.rpe !== null && (
+              <p className="tech-label">
+                cansancio <span className="text-chalk">{s.rpe}/10</span>
+              </p>
+            )}
+            <p className="tech-label">
+              viento{" "}
+              <span className="text-chalk">
+                {WIND_LABELS[s.windDirection] ?? s.windDirection}
+                {s.windDirection !== "calma" ? ` ${s.windKmh} km/h` : ""}
+              </span>
+            </p>
+            {s.confidence !== null && (
+              <p className="tech-label">
+                confianza <span className="text-gold-300">{"⭐".repeat(s.confidence)}</span>
+              </p>
+            )}
+          </div>
+
+          {s.mentalNote.trim() && (
+            <p className="mt-2.5 border-l-2 border-gold-400/30 pl-3 text-xs leading-relaxed text-chalk-dim italic">
+              &ldquo;{s.mentalNote}&rdquo;
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

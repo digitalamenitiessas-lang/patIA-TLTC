@@ -11,7 +11,7 @@ import {
   unsubscribeFromPush,
   type PushStatus,
 } from "@/lib/push";
-import type { Division } from "@/lib/types";
+import { RUGBY_POSITIONS, type Division } from "@/lib/types";
 
 const DIVISIONS: Division[] = [
   "M6-M14",
@@ -72,6 +72,38 @@ export default function PerfilPage() {
                 onChange={(e) => updateProfile({ fullName: e.target.value })}
                 className="mt-1 w-full rounded-xl border border-navy-300/20 bg-pitch-800 px-3.5 py-3 text-sm text-chalk focus:border-gold-400/50 focus:outline-none"
               />
+            </div>
+
+            <div>
+              <label className="tech-label">DNI</label>
+              <input
+                value={profile.dni ?? ""}
+                onChange={(e) =>
+                  updateProfile({ dni: e.target.value.replace(/\D/g, "").slice(0, 9) })
+                }
+                inputMode="numeric"
+                placeholder="Sin puntos"
+                className="mt-1 w-full rounded-xl border border-navy-300/20 bg-pitch-800 px-3.5 py-3 text-sm text-chalk placeholder:text-chalk-faint focus:border-gold-400/50 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="tech-label">Puesto</label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {RUGBY_POSITIONS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => updateProfile({ position: p })}
+                    className={`rounded-full border px-3 py-1.5 font-mono text-[11px] ${
+                      profile.position === p
+                        ? "border-gold-400/60 bg-gold-400/15 text-gold-300"
+                        : "border-navy-300/20 text-chalk-dim"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div>
