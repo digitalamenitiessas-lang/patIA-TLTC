@@ -20,7 +20,6 @@ import {
 import { usePlayer } from "@/lib/store";
 import { sessionXp } from "@/lib/gamification";
 import { checkIn, type CheckinStatus } from "@/lib/geo";
-import { checkIn, type CheckinStatus } from "@/lib/geo";
 import type {
   FieldMode,
   Kick,
