@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FIELD_W,
   FIELD_H,
@@ -21,12 +21,22 @@ interface Pt {
   y: number;
 }
 
+/** Animación one-shot del gesto de patada (coords de juego del modo) */
+export interface KickFxSpec {
+  from: Pt;
+  to: Pt;
+  made: boolean;
+  bounce?: boolean;
+  key: number;
+}
+
 interface Props {
   mode: FieldMode;
   kicks: Kick[];
   origin: Pt | null;
   end: Pt | null;
   onTap: (x: number, y: number) => void;
+  fx?: KickFxSpec | null;
 }
 
 /** ViewBox y conversión de coordenadas de juego → SVG por modo */
@@ -225,6 +235,253 @@ function Flight({ from, to, bounce }: { from: Pt; to: Pt; bounce?: boolean }) {
   );
 }
 
+/**
+ * Overlay HTML que anima el gesto de la patada: la pelota vuela por la
+ * parábola y al aterrizar estalla en oro (adentro) o sacude una X roja
+ * (afuera). Usa la Web Animations API para reiniciar limpio en cada patada.
+ */
+function KickFxOverlay({
+  fx,
+  geom,
+}: {
+  fx: KickFxSpec;
+  geom: (typeof GEOM)[FieldMode];
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const [vx, vy, vw, vh] = geom.viewBox.split(/\s+/).map(Number);
+  const toPct = (sx: number, sy: number) => ({
+    left: ((sx - vx) / vw) * 100,
+    top: ((sy - vy) / vh) * 100,
+  });
+
+  const from = { x: fx.from.x, y: geom.toSvgY(fx.from.y) };
+  const to = { x: fx.to.x, y: geom.toSvgY(fx.to.y) };
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const arc = fx.bounce ? 0 : Math.min(10, len * 0.3);
+  const cxp = (from.x + to.x) / 2 - (dy / len) * arc;
+  const cyp = (from.y + to.y) / 2 + (dx / len) * arc;
+
+  const fromP = toPct(from.x, from.y);
+  const toP = toPct(to.x, to.y);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const DUR = 640;
+    const anims: Animation[] = [];
+    const qa = (s: string) =>
+      Array.from(root.querySelectorAll<HTMLElement>(s));
+
+    // ── Vuelo de la pelota por la parábola ──
+    const ball = root.querySelector<HTMLElement>("[data-role=ball]");
+    if (ball) {
+      const N = 26;
+      const frames: Keyframe[] = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const mt = 1 - t;
+        const sx = mt * mt * from.x + 2 * mt * t * cxp + t * t * to.x;
+        const sy = mt * mt * from.y + 2 * mt * t * cyp + t * t * to.y;
+        const p = toPct(sx, sy);
+        const sc = fx.bounce ? 1 : 1 + Math.sin(t * Math.PI) * 0.18 - t * 0.12;
+        frames.push({
+          offset: t,
+          left: `${p.left}%`,
+          top: `${p.top}%`,
+          transform: `translate(-50%,-50%) rotate(${t * (fx.bounce ? 120 : 260)}deg) scale(${sc})`,
+          opacity: t < 0.94 ? 1 : 0,
+        });
+      }
+      anims.push(
+        ball.animate(frames, {
+          duration: DUR,
+          easing: "cubic-bezier(.3,0,.35,1)",
+          fill: "forwards",
+        }),
+      );
+    }
+
+    const field = root.parentElement;
+
+    if (fx.made) {
+      qa("[data-role=ring]").forEach((el, i) =>
+        anims.push(
+          el.animate(
+            [
+              { transform: "translate(-50%,-50%) scale(0.2)", opacity: 0.9 },
+              { transform: "translate(-50%,-50%) scale(1)", opacity: 0 },
+            ],
+            { duration: 640, delay: DUR - 40 + i * 70, easing: "cubic-bezier(.15,.7,.2,1)", fill: "both" },
+          ),
+        ),
+      );
+      qa("[data-role=spark]").forEach((el) => {
+        const a = Number(el.dataset.a);
+        anims.push(
+          el.animate(
+            [
+              { transform: "translate(-50%,-50%) translate(0,0) scale(1)", opacity: 1 },
+              { transform: `translate(-50%,-50%) translate(${Math.cos(a) * 3}rem,${Math.sin(a) * 3}rem) scale(0)`, opacity: 0 },
+            ],
+            { duration: 560, delay: DUR, easing: "cubic-bezier(.2,.8,.2,1)", fill: "both" },
+          ),
+        );
+      });
+      if (field)
+        anims.push(
+          field.animate(
+            [
+              { boxShadow: "0 0 0 0 rgba(255,209,0,0)" },
+              { boxShadow: "0 0 0 3px rgba(255,209,0,0.55), 0 0 34px rgba(255,209,0,0.4)", offset: 0.5 },
+              { boxShadow: "0 0 0 0 rgba(255,209,0,0)" },
+            ],
+            { duration: 900, delay: DUR - 60, fill: "none" },
+          ),
+        );
+    } else {
+      const x = root.querySelector<HTMLElement>("[data-role=missx]");
+      if (x)
+        anims.push(
+          x.animate(
+            [
+              { transform: "translate(-50%,-50%) scale(1.7)", opacity: 0 },
+              { transform: "translate(-50%,-50%) scale(1)", opacity: 1, offset: 0.3 },
+              { transform: "translate(-50%,-50%) scale(1)", opacity: 1, offset: 0.8 },
+              { transform: "translate(-50%,-50%) scale(1)", opacity: 0 },
+            ],
+            { duration: 850, delay: DUR - 40, easing: "ease-out", fill: "both" },
+          ),
+        );
+      const ring = root.querySelector<HTMLElement>("[data-role=missring]");
+      if (ring)
+        anims.push(
+          ring.animate(
+            [
+              { transform: "translate(-50%,-50%) scale(0.2)", opacity: 0.7 },
+              { transform: "translate(-50%,-50%) scale(1)", opacity: 0 },
+            ],
+            { duration: 500, delay: DUR - 40, easing: "ease-out", fill: "both" },
+          ),
+        );
+      if (field)
+        anims.push(
+          field.animate(
+            [
+              { transform: "translateX(0)" },
+              { transform: "translateX(-4px)", offset: 0.2 },
+              { transform: "translateX(4px)", offset: 0.4 },
+              { transform: "translateX(-3px)", offset: 0.6 },
+              { transform: "translateX(2px)", offset: 0.8 },
+              { transform: "translateX(0)" },
+            ],
+            { duration: 360, delay: DUR - 50, easing: "ease-in-out" },
+          ),
+        );
+    }
+
+    return () => anims.forEach((a) => a.cancel());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fx.key]);
+
+  return (
+    <div ref={rootRef} className="pointer-events-none absolute inset-0 overflow-hidden">
+      {/* Pelota */}
+      <div
+        data-role="ball"
+        className="absolute"
+        style={{
+          left: `${fromP.left}%`,
+          top: `${fromP.top}%`,
+          width: "6.4%",
+          aspectRatio: "3 / 2",
+          transform: "translate(-50%,-50%)",
+          borderRadius: "50%",
+          background: "radial-gradient(circle at 35% 30%, #fff6c8, #ffd100 55%, #c99a00)",
+          boxShadow: "0 0 12px rgba(255,209,0,0.65)",
+        }}
+      >
+        <span style={{ position: "absolute", inset: "45% 22% auto", borderTop: "1px solid rgba(26,20,0,0.55)" }} />
+      </div>
+
+      {fx.made ? (
+        <>
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              data-role="ring"
+              className="absolute rounded-full"
+              style={{
+                left: `${toP.left}%`,
+                top: `${toP.top}%`,
+                width: "26%",
+                aspectRatio: "1",
+                border: `2px solid ${i ? "#34d399" : "#ffd100"}`,
+                transform: "translate(-50%,-50%) scale(0)",
+                opacity: 0,
+              }}
+            />
+          ))}
+          {Array.from({ length: 9 }).map((_, i) => {
+            const a = (i / 9) * Math.PI * 2;
+            return (
+              <div
+                key={i}
+                data-role="spark"
+                data-a={a}
+                className="absolute rounded-full"
+                style={{
+                  left: `${toP.left}%`,
+                  top: `${toP.top}%`,
+                  width: "2.6%",
+                  aspectRatio: "1",
+                  background: i % 2 ? "#34d399" : "#ffd100",
+                  transform: "translate(-50%,-50%)",
+                  opacity: 0,
+                }}
+              />
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <div
+            data-role="missring"
+            className="absolute rounded-full"
+            style={{
+              left: `${toP.left}%`,
+              top: `${toP.top}%`,
+              width: "20%",
+              aspectRatio: "1",
+              border: "2px solid #f0464b",
+              transform: "translate(-50%,-50%) scale(0)",
+              opacity: 0,
+            }}
+          />
+          <div
+            data-role="missx"
+            className="absolute font-bold"
+            style={{
+              left: `${toP.left}%`,
+              top: `${toP.top}%`,
+              transform: "translate(-50%,-50%)",
+              opacity: 0,
+              color: "#f0464b",
+              fontSize: "min(9vw, 2.4rem)",
+              lineHeight: 1,
+              textShadow: "0 0 12px rgba(240,70,75,0.6)",
+            }}
+          >
+            ✗
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Posts({ y = 0 }: { y?: number }) {
   const gx = POSTS_X - POSTS_GAP / 2;
   return (
@@ -236,7 +493,7 @@ function Posts({ y = 0 }: { y?: number }) {
   );
 }
 
-export function TacticalField({ mode, kicks, origin, end, onTap }: Props) {
+export function TacticalField({ mode, kicks, origin, end, onTap, fx }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [flash, setFlash] = useState(false);
   const g = GEOM[mode];
@@ -454,6 +711,9 @@ export function TacticalField({ mode, kicks, origin, end, onTap }: Props) {
           </>
         )}
       </svg>
+
+      {/* Animación del gesto de patada (one-shot) */}
+      {fx && <KickFxOverlay key={fx.key} fx={fx} geom={g} />}
 
       {/* Instrucción contextual */}
       <div className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 rounded-full border border-navy-300/25 bg-pitch-950/80 px-3 py-1 backdrop-blur">

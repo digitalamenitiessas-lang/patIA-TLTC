@@ -1,15 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import { TacticalField } from "@/components/TacticalField";
+import { TacticalField, type KickFxSpec } from "@/components/TacticalField";
 import {
   MODE_OF,
   MODE_SPECS,
   RESULTS_BY_MODE,
   SALIDA_ORIGIN,
   SALIDA_ZONE_INFO,
+  POSTS_X,
   kickMetrics,
   goalDifficulty,
   salidaMetrics,
@@ -18,7 +19,7 @@ import {
   type ResultOption,
 } from "@/lib/field";
 import { usePlayer } from "@/lib/store";
-import { sessionXp } from "@/lib/gamification";
+import { sessionXp, XP_PER_KICK, XP_PER_MADE } from "@/lib/gamification";
 import { checkIn, type CheckinStatus } from "@/lib/geo";
 import type {
   FieldMode,
@@ -94,6 +95,12 @@ export default function CargarPage() {
     setCheckin({ state: "locating" });
     setCheckin(await checkIn());
   };
+
+  // Animación del gesto de patada + combo de aciertos seguidos
+  const fxKey = useRef(0);
+  const [fx, setFx] = useState<KickFxSpec | null>(null);
+  const [xpPop, setXpPop] = useState<{ amount: number; made: boolean; combo: number; key: number } | null>(null);
+  const comboRef = useRef(0);
 
   const clearPending = () => {
     setOrigin(null);
@@ -177,6 +184,27 @@ export default function CargarPage() {
     }
 
     if (!kick) return;
+
+    // Trayectoria del gesto según el modo (coords de juego)
+    const target =
+      mode === "palos"
+        ? { x: POSTS_X, y: 1.5 }
+        : end ?? { x: kick.x, y: kick.y };
+    const start =
+      mode === "salida"
+        ? SALIDA_ORIGIN
+        : { x: kick.x, y: kick.y };
+    const key = ++fxKey.current;
+    setFx({ from: start, to: target, made: isMade, bounce: mode === "rastron", key });
+
+    comboRef.current = isMade ? comboRef.current + 1 : 0;
+    setXpPop({
+      amount: XP_PER_KICK + (isMade ? XP_PER_MADE : 0),
+      made: isMade,
+      combo: comboRef.current,
+      key,
+    });
+
     setKicks((prev) => [...prev, kick]);
     clearPending();
     if (navigator.vibrate) navigator.vibrate(isMade ? [10, 40, 20] : 15);
@@ -322,14 +350,35 @@ export default function CargarPage() {
         )}
       </div>
 
-      <div className="lg:col-start-1 lg:row-start-2 lg:row-span-4">
+      <div className="relative lg:col-start-1 lg:row-start-2 lg:row-span-4">
         <TacticalField
           mode={mode}
           kicks={modeKicks}
           origin={mode === "salida" ? SALIDA_ORIGIN : origin}
           end={end}
           onTap={handleTap}
+          fx={fx}
         />
+        {/* +XP flotante + combo de aciertos */}
+        {xpPop && (
+          <div
+            key={xpPop.key}
+            className="xp-pop pointer-events-none absolute left-1/2 top-[14%] z-20 flex flex-col items-center"
+          >
+            <span
+              className={`tele-num text-2xl font-bold drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)] ${
+                xpPop.made ? "text-gold-300" : "text-chalk-dim"
+              }`}
+            >
+              +{xpPop.amount} XP
+            </span>
+            {xpPop.made && xpPop.combo >= 2 && (
+              <span className="tele-num mt-0.5 rounded-full bg-gold-400/20 px-2 py-0.5 text-xs font-semibold text-gold-300">
+                🔥 {xpPop.combo} seguidas
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Slider de esfuerzo — filosofía Alred */}
