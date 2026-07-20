@@ -30,6 +30,7 @@ import {
 } from "@/lib/gamification";
 import type { BadgeDef } from "@/lib/types";
 import { checkIn, type CheckinStatus } from "@/lib/geo";
+import { weatherNow, type WeatherNow } from "@/lib/weather";
 import type {
   FieldMode,
   Kick,
@@ -106,6 +107,26 @@ export default function CargarPage() {
   const [confidence, setConfidence] = useState(3);
   const [note, setNote] = useState("");
   const [checkin, setCheckin] = useState<CheckinStatus>({ state: "idle" });
+  const [weather, setWeather] = useState<WeatherNow | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [weatherAuto, setWeatherAuto] = useState(false);
+
+  // Al abrir el cierre, autocompletar el clima desde Open-Meteo
+  const openClosing = () => {
+    setClosing(true);
+    if (weather || weatherLoading) return;
+    setWeatherLoading(true);
+    weatherNow()
+      .then((w) => {
+        if (w) {
+          setWeather(w);
+          setWindKmh(w.windKmh);
+          setWeatherAuto(true);
+          if (w.windKmh < 6) setWindDir("calma");
+        }
+      })
+      .finally(() => setWeatherLoading(false));
+  };
 
   const doCheckIn = async () => {
     setCheckin({ state: "locating" });
@@ -243,6 +264,8 @@ export default function CargarPage() {
       confidence,
       venue: checkin.state === "verified" ? checkin.venueId : null,
       venueVerified: checkin.state === "verified",
+      temperatureC: weather?.tempC ?? null,
+      weatherAuto,
       createdAt: new Date().toISOString(),
     };
     // Recompensa: comparar el antes (stats actuales) con el después
@@ -623,7 +646,7 @@ export default function CargarPage() {
       {kicks.length > 0 && !panelReady && (
         <div className="flex gap-2 lg:col-start-2 lg:row-start-5 lg:flex-col">
           <button
-            onClick={() => setClosing(true)}
+            onClick={openClosing}
             className="btn-gold flex-1 rounded-2xl py-4 text-sm font-bold tracking-wide uppercase"
           >
             Terminar sesión ({kicks.length})
@@ -659,6 +682,25 @@ export default function CargarPage() {
               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-chalk-faint/40" />
               <h2 className="display mb-4 text-xl text-chalk">Cerrar la sesión</h2>
 
+              {/* Clima automático (Open-Meteo) */}
+              {weatherLoading ? (
+                <div className="mb-4 flex items-center gap-2 rounded-xl border border-navy-300/20 bg-pitch-800 px-3.5 py-2.5 text-xs text-chalk-dim">
+                  <span className="animate-pulse">🛰️</span> Obteniendo el clima de tu ubicación…
+                </div>
+              ) : weather ? (
+                <div className="mb-4 flex items-center gap-3 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-3.5 py-2.5">
+                  <span className="text-2xl">{weather.emoji}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-chalk">
+                      {weather.label} · <span className="tele-num font-semibold">{weather.tempC}°</span>
+                    </p>
+                    <p className="tech-label">
+                      Viento {weather.windKmh} km/h del {weather.compass} · autocompletado
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
               <label className="tech-label">
                 Cansancio (RPE) · <span className="text-gold-400">{rpe}/10</span>
               </label>
@@ -671,7 +713,14 @@ export default function CargarPage() {
                 className="mb-4 w-full"
               />
 
-              <label className="tech-label">Viento</label>
+              <label className="tech-label">
+                Viento{" "}
+                {weather && weather.windKmh >= 6 && (
+                  <span className="text-chalk-dim">
+                    · sopla del {weather.compass} — ¿cómo te pega?
+                  </span>
+                )}
+              </label>
               <div className="mt-1 mb-3 flex gap-1.5 overflow-x-auto">
                 {WINDS.map((w) => (
                   <button

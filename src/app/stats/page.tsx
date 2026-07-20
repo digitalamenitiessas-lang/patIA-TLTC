@@ -573,6 +573,11 @@ function SessionCard({ session: s, prev }: { session: Session; prev?: Session })
                 confianza <span className="text-gold-300">{"⭐".repeat(s.confidence)}</span>
               </p>
             )}
+            {s.temperatureC != null && (
+              <p className="tech-label">
+                clima <span className="text-chalk">{Math.round(s.temperatureC)}°</span>
+              </p>
+            )}
             {s.venueVerified && s.venue && (
               <p className="tech-label">
                 📍{" "}

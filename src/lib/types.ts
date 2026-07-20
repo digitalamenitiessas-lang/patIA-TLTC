@@ -83,6 +83,10 @@ export interface Session {
   venue?: string | null;
   /** true si el GPS confirmó que estaba en el predio */
   venueVerified?: boolean;
+  /** Temperatura en °C (autocompletada desde Open-Meteo) */
+  temperatureC?: number | null;
+  /** true si el clima se cargó automáticamente */
+  weatherAuto?: boolean;
   createdAt: string;
 }
 

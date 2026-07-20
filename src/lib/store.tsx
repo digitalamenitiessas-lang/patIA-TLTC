@@ -179,6 +179,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             confidence: s.confidence,
             venue: s.venue ?? null,
             venueVerified: s.venue_verified ?? false,
+            temperatureC: s.temperature_c != null ? Number(s.temperature_c) : null,
+            weatherAuto: s.weather_auto ?? false,
             createdAt: s.created_at,
             kicks: (s.logged_kicks ?? []).map(
               (k: Record<string, unknown>) => ({
@@ -241,6 +243,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           confidence: s.confidence,
           venue: s.venue ?? null,
           venue_verified: s.venueVerified ?? false,
+          temperature_c: s.temperatureC ?? null,
+          weather_auto: s.weatherAuto ?? false,
         });
         if (s.kicks.length) {
           await supabase.from("logged_kicks").insert(
