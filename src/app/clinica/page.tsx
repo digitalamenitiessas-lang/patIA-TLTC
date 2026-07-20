@@ -342,6 +342,7 @@ function mapSessionRow(s: Record<string, unknown>): Session {
       isMade: k.is_made as boolean,
       category: k.kick_category as Kick["category"],
       effortPct: (k.effort_pct as number) ?? 40,
+      createdAt: (k.created_at as string) ?? "",
     })),
   };
 }
