@@ -1,10 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePlayer } from "@/lib/store";
 import { getSupabase } from "@/lib/supabase";
-import type { Clinic, Coach, CoachFeedback } from "@/lib/types";
+import { buildSummary, type StatsSummary } from "@/lib/coach";
+import { totalXp, streakDays } from "@/lib/gamification";
+import {
+  GOAL_CATEGORIES,
+  zoneOf,
+  ZONE_LABELS,
+  POSTS_X,
+  POSTS_GAP,
+} from "@/lib/field";
+import type { Clinic, Coach, CoachFeedback, Kick, Session } from "@/lib/types";
 
 interface PlayerOption {
   id: string;
@@ -313,6 +322,246 @@ export default function ClinicaPage() {
 
 /* ── Herramientas del staff (admin y coaches) ─────────────── */
 
+/** Convierte una fila de training_sessions (con logged_kicks) al shape de la app */
+function mapSessionRow(s: Record<string, unknown>): Session {
+  return {
+    id: s.id as string,
+    date: s.session_date as string,
+    rpe: (s.rpe_fatigue_index as number) ?? null,
+    windKmh: (s.wind_velocity_kmh as number) ?? 0,
+    windDirection: (s.wind_direction as Session["windDirection"]) ?? "calma",
+    mentalNote: (s.psychological_note as string) ?? "",
+    confidence: (s.confidence as number) ?? null,
+    createdAt: (s.created_at as string) ?? "",
+    kicks: ((s.logged_kicks as Record<string, unknown>[]) ?? []).map((k) => ({
+      id: k.id as string,
+      x: Number(k.x_coord),
+      y: Number(k.y_coord),
+      distance: k.calculated_distance_m as number,
+      angle: k.calculated_angle_deg as number,
+      isMade: k.is_made as boolean,
+      category: k.kick_category as Kick["category"],
+      effortPct: (k.effort_pct as number) ?? 40,
+    })),
+  };
+}
+
+/**
+ * Telemetría del jugador para el referente: al elegir un jugador en el
+ * formulario de devolución, el staff ve sus números y su mapa de patadas
+ * para que el análisis esté fundado en datos reales.
+ */
+function PlayerTelemetry({
+  playerId,
+  onSummary,
+}: {
+  playerId: string;
+  onSummary: (s: StatsSummary | null) => void;
+}) {
+  const [sessions, setSessions] = useState<Session[] | null>(null);
+
+  useEffect(() => {
+    if (!playerId) {
+      setSessions(null);
+      onSummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = getSupabase();
+      if (!supabase) return;
+      setSessions(null);
+      const [{ data: prof }, { data: rows }] = await Promise.all([
+        supabase
+          .from("player_profiles")
+          .select("full_name, division, preferred_foot, skill_level")
+          .eq("id", playerId)
+          .single(),
+        supabase
+          .from("training_sessions")
+          .select("*, logged_kicks(*)")
+          .eq("player_id", playerId)
+          .order("session_date", { ascending: false }),
+      ]);
+      if (cancelled) return;
+      const mapped = (rows ?? []).map(mapSessionRow);
+      setSessions(mapped);
+      const profile = {
+        fullName: prof?.full_name ?? "Jugador",
+        division: prof?.division ?? "M15",
+        preferredFoot: (prof?.preferred_foot ?? "derecho") as "derecho" | "izquierdo",
+        skillLevel: (prof?.skill_level ?? 1) as 1 | 2 | 3,
+        createdAt: "",
+      };
+      onSummary(
+        buildSummary({
+          sessions: mapped,
+          allKicks: mapped.flatMap((s) => s.kicks),
+          profile,
+          streakDays: streakDays(mapped),
+          xp: totalXp(mapped),
+        }),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
+
+  const stats = useMemo(() => {
+    if (!sessions) return null;
+    const kicks = sessions.flatMap((s) => s.kicks);
+    const made = kicks.filter((k) => k.isMade);
+    const goal = kicks.filter((k) => GOAL_CATEGORIES.includes(k.category));
+    const goalMade = goal.filter((k) => k.isMade);
+    const eff = kicks.length ? Math.round((made.length / kicks.length) * 100) : 0;
+    const record = goalMade.length ? Math.max(...goalMade.map((k) => k.distance)) : 0;
+
+    // Grid de honestidad 3×3 (solo a los palos)
+    const grid: { a: number; m: number }[][] = Array.from({ length: 3 }, () =>
+      Array.from({ length: 3 }, () => ({ a: 0, m: 0 })),
+    );
+    for (const k of goal) {
+      const z = zoneOf(k.distance, k.angle);
+      grid[z.d][z.a].a++;
+      if (k.isMade) grid[z.d][z.a].m++;
+    }
+
+    // Fatiga
+    const withRpe = sessions.filter((s) => s.rpe !== null && s.kicks.length >= 5);
+    const effOf = (list: Session[]) => {
+      const all = list.flatMap((s) => s.kicks);
+      return all.length ? Math.round((all.filter((k) => k.isMade).length / all.length) * 100) : null;
+    };
+    const fatigue =
+      withRpe.length >= 3
+        ? { fresh: effOf(withRpe.filter((s) => (s.rpe ?? 0) <= 5)), tired: effOf(withRpe.filter((s) => (s.rpe ?? 0) > 5)) }
+        : null;
+
+    return {
+      total: kicks.length,
+      sessions: sessions.length,
+      eff,
+      record,
+      avg: goalMade.length ? Math.round(goalMade.reduce((a, k) => a + k.distance, 0) / goalMade.length) : 0,
+      grid,
+      goalKicks: goal.slice(-30),
+      fatigue,
+    };
+  }, [sessions]);
+
+  if (!playerId) return null;
+  if (!stats) {
+    return (
+      <div className="rounded-xl border border-navy-300/15 bg-pitch-950/40 px-3.5 py-3 text-center text-[11px] text-chalk-dim">
+        Cargando telemetría…
+      </div>
+    );
+  }
+  if (stats.total === 0) {
+    return (
+      <div className="rounded-xl border border-navy-300/15 bg-pitch-950/40 px-3.5 py-3 text-center text-[11px] text-chalk-dim">
+        Este jugador todavía no cargó patadas.
+      </div>
+    );
+  }
+
+  const gx = POSTS_X - POSTS_GAP / 2;
+
+  return (
+    <div className="rounded-xl border border-navy-300/20 bg-pitch-950/50 p-3.5">
+      <p className="tech-label mb-2">📊 Telemetría del jugador</p>
+      <div className="mb-3 grid grid-cols-4 gap-2 text-center">
+        <Stat n={`${stats.eff}%`} l="efect." />
+        <Stat n={String(stats.total)} l="patadas" />
+        <Stat n={`${stats.avg}m`} l="prom." />
+        <Stat n={`${stats.record}m`} l="récord" gold />
+      </div>
+
+      <div className="flex gap-3">
+        {/* Mini mapa de patadas a los palos */}
+        <div className="w-[46%] shrink-0">
+          <svg
+            viewBox="0 0 70 50"
+            className="w-full rounded-lg border border-navy-300/15"
+            style={{ background: "linear-gradient(180deg, rgba(6,30,20,0.9), rgba(5,16,12,0.95))" }}
+          >
+            <line x1="0" y1="1.5" x2="70" y2="1.5" stroke="#eef2fa" strokeWidth="0.5" opacity="0.8" />
+            <line x1="0" y1="23.5" x2="70" y2="23.5" stroke="#eef2fa" strokeWidth="0.3" opacity="0.4" />
+            <g>
+              <line x1={gx} y1="0" x2={gx} y2="3" stroke="#ffd100" strokeWidth="0.8" strokeLinecap="round" />
+              <line x1={gx + POSTS_GAP} y1="0" x2={gx + POSTS_GAP} y2="3" stroke="#ffd100" strokeWidth="0.8" strokeLinecap="round" />
+              <line x1={gx} y1="1.5" x2={gx + POSTS_GAP} y2="1.5" stroke="#ffd100" strokeWidth="0.6" />
+            </g>
+            {stats.goalKicks.map((k) =>
+              k.isMade ? (
+                <circle key={k.id} cx={k.x} cy={k.y} r="1.2" fill="#10b981" opacity="0.9" stroke="#03060e" strokeWidth="0.2" />
+              ) : (
+                <g key={k.id} stroke="#f0464b" strokeWidth="0.45" opacity="0.9" strokeLinecap="round">
+                  <line x1={k.x - 0.9} y1={k.y - 0.9} x2={k.x + 0.9} y2={k.y + 0.9} />
+                  <line x1={k.x - 0.9} y1={k.y + 0.9} x2={k.x + 0.9} y2={k.y - 0.9} />
+                </g>
+              ),
+            )}
+          </svg>
+          <p className="mt-1 text-center text-[9px] text-chalk-faint">Dónde patea a los palos</p>
+        </div>
+
+        {/* Grid de honestidad por zona */}
+        <div className="min-w-0 flex-1">
+          <div className="grid grid-cols-3 gap-1">
+            {stats.grid.flatMap((row, d) =>
+              row.map((cell, a) => {
+                const pct = cell.a ? Math.round((cell.m / cell.a) * 100) : null;
+                const bg =
+                  pct === null
+                    ? "rgba(74,84,104,0.12)"
+                    : pct >= 70
+                      ? "rgba(16,185,129,0.4)"
+                      : pct >= 40
+                        ? "rgba(255,209,0,0.35)"
+                        : "rgba(240,70,75,0.35)";
+                return (
+                  <div
+                    key={`${d}-${a}`}
+                    className="flex h-8 items-center justify-center rounded"
+                    style={{ background: bg }}
+                    title={`${ZONE_LABELS.d[d]} · ${ZONE_LABELS.a[a]}`}
+                  >
+                    <span className="tele-num text-[10px] font-semibold text-chalk">
+                      {pct === null ? "—" : `${pct}%`}
+                    </span>
+                  </div>
+                );
+              }),
+            )}
+          </div>
+          <p className="mt-1 text-center text-[9px] text-chalk-faint">
+            Zonas: distancia ↓ · ángulo →
+          </p>
+        </div>
+      </div>
+
+      {stats.fatigue && stats.fatigue.fresh !== null && stats.fatigue.tired !== null && (
+        <p className="mt-2.5 rounded-lg bg-pitch-900/60 px-3 py-2 text-[11px] text-chalk-dim">
+          🫁 Fatiga: <span className="text-try-400">{stats.fatigue.fresh}%</span> descansado vs{" "}
+          <span className="text-miss-500">{stats.fatigue.tired}%</span> cansado
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ n, l, gold }: { n: string; l: string; gold?: boolean }) {
+  return (
+    <div>
+      <p className={`tele-num text-base font-semibold ${gold ? "text-gold-300" : "text-chalk"}`}>{n}</p>
+      <p className="tech-label">{l}</p>
+    </div>
+  );
+}
+
 function StaffPanel({
   coaches,
   onDone,
@@ -332,6 +581,29 @@ function StaffPanel({
   const [coachId, setCoachId] = useState("");
   const [body, setBody] = useState("");
   const [focusNext, setFocusNext] = useState("");
+  const [playerSummary, setPlayerSummary] = useState<StatsSummary | null>(null);
+  const [drafting, setDrafting] = useState(false);
+
+  const suggestDraft = async () => {
+    if (!playerSummary || drafting) return;
+    const coachName = coaches.find((c) => c.id === coachId)?.fullName ?? "el referente";
+    setDrafting(true);
+    try {
+      const res = await fetch("/api/patia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Sos ${coachName}, referente pateador de la clínica. Redactá una devolución breve (3-4 oraciones) para este jugador basada en su telemetría real, hablándole de vos a él: un punto técnico concreto a mejorar (según sus zonas flojas y su fatiga) y un refuerzo positivo. Sin saludos largos ni firma; es un borrador para revisar.`,
+          summary: playerSummary,
+          history: [],
+        }),
+      });
+      const d = await res.json();
+      if (d.text) setBody(d.text);
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   // Clínica
   const [title, setTitle] = useState("");
@@ -468,6 +740,9 @@ function StaffPanel({
               </option>
             ))}
           </select>
+          {/* Telemetría del jugador seleccionado */}
+          <PlayerTelemetry playerId={playerId} onSummary={setPlayerSummary} />
+
           <select value={coachId} onChange={(e) => setCoachId(e.target.value)} className={inputCls}>
             <option value="">Referente que firma…</option>
             {coaches.map((c) => (
@@ -476,11 +751,25 @@ function StaffPanel({
               </option>
             ))}
           </select>
+
+          <div className="flex items-center justify-between">
+            <label className="tech-label">Devolución</label>
+            {playerSummary && playerSummary.totalKicks > 0 && (
+              <button
+                type="button"
+                onClick={() => void suggestDraft()}
+                disabled={drafting}
+                className="rounded-lg border border-gold-400/40 bg-gold-400/10 px-2.5 py-1 font-mono text-[10px] tracking-wider text-gold-300 uppercase disabled:opacity-50"
+              >
+                {drafting ? "◌ redactando…" : "🤖 sugerir con PatIA"}
+              </button>
+            )}
+          </div>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            rows={3}
-            placeholder="Análisis técnico: qué vio el referente en su pateo…"
+            rows={4}
+            placeholder="Análisis técnico: qué vio el referente en su pateo… (o generá un borrador con PatIA y editalo)"
             className={inputCls}
           />
           <input
