@@ -19,7 +19,16 @@ import {
   type ResultOption,
 } from "@/lib/field";
 import { usePlayer } from "@/lib/store";
-import { sessionXp, XP_PER_KICK, XP_PER_MADE } from "@/lib/gamification";
+import {
+  sessionXp,
+  totalXp,
+  streakDays,
+  earnedBadges,
+  rankFor,
+  XP_PER_KICK,
+  XP_PER_MADE,
+} from "@/lib/gamification";
+import type { BadgeDef } from "@/lib/types";
 import { checkIn, type CheckinStatus } from "@/lib/geo";
 import type {
   FieldMode,
@@ -68,9 +77,16 @@ const TONE_CLASSES: Record<ResultOption["tone"], string> = {
   miss: "bg-miss-500 text-white",
 };
 
+interface SessionReward {
+  rankedUp: boolean;
+  newRank: string;
+  newBadges: BadgeDef[];
+  maxCombo: number;
+}
+
 export default function CargarPage() {
   const router = useRouter();
-  const { addSession } = usePlayer();
+  const { addSession, stats, sessions, profile } = usePlayer();
 
   const [category, setCategory] = useState<KickCategory>("conversion");
   const mode = MODE_OF[category];
@@ -101,6 +117,8 @@ export default function CargarPage() {
   const [fx, setFx] = useState<KickFxSpec | null>(null);
   const [xpPop, setXpPop] = useState<{ amount: number; made: boolean; combo: number; key: number } | null>(null);
   const comboRef = useRef(0);
+  const maxComboRef = useRef(0);
+  const [reward, setReward] = useState<SessionReward | null>(null);
 
   const clearPending = () => {
     setOrigin(null);
@@ -198,6 +216,7 @@ export default function CargarPage() {
     setFx({ from: start, to: target, made: isMade, bounce: mode === "rastron", key });
 
     comboRef.current = isMade ? comboRef.current + 1 : 0;
+    if (comboRef.current > maxComboRef.current) maxComboRef.current = comboRef.current;
     setXpPop({
       amount: XP_PER_KICK + (isMade ? XP_PER_MADE : 0),
       made: isMade,
@@ -226,6 +245,28 @@ export default function CargarPage() {
       venueVerified: checkin.state === "verified",
       createdAt: new Date().toISOString(),
     };
+    // Recompensa: comparar el antes (stats actuales) con el después
+    const preBadgeIds = new Set(earnedBadges(stats).map((b) => b.id));
+    const preRank = rankFor(stats.xp).current.name;
+
+    const postSessions = [session, ...sessions];
+    const postCtx = {
+      sessions: postSessions,
+      allKicks: postSessions.flatMap((s) => s.kicks),
+      profile,
+      streakDays: streakDays(postSessions),
+      xp: totalXp(postSessions),
+    };
+    const postRank = rankFor(postCtx.xp).current.name;
+    const newBadges = earnedBadges(postCtx).filter((b) => !preBadgeIds.has(b.id));
+
+    setReward({
+      rankedUp: postRank !== preRank,
+      newRank: postRank,
+      newBadges,
+      maxCombo: maxComboRef.current,
+    });
+
     addSession(session);
     setSaved(session);
     setClosing(false);
@@ -244,17 +285,38 @@ export default function CargarPage() {
       return `${t.icon} ${ok}/${ks.length}`;
     }).filter(Boolean);
 
+    const celebrate = !!reward && (reward.rankedUp || reward.newBadges.length > 0);
+
     return (
-      <main className="flex min-h-[70dvh] flex-col items-center justify-center gap-6 text-center">
+      <main className="flex min-h-[70dvh] flex-col items-center justify-center gap-5 text-center">
         <motion.div
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 15 }}
-          className="tele-card-gold flex flex-col items-center gap-2 px-10 py-8"
+          className="tele-card-gold relative flex flex-col items-center gap-2 overflow-hidden px-10 py-8"
         >
-          <span className="text-5xl">🏉</span>
+          {/* Estallido de partículas si hubo recompensa */}
+          {celebrate && (
+            <div className="pointer-events-none absolute left-1/2 top-16 -z-0">
+              {Array.from({ length: 16 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="reward-particle h-1.5 w-1.5 rounded-full"
+                  style={
+                    {
+                      background: i % 2 ? "#34d399" : "#ffd100",
+                      "--a": `${(i / 16) * 360}deg`,
+                      "--r": `${64 + (i % 3) * 18}px`,
+                      "--d": `${(i % 4) * 0.05}s`,
+                    } as React.CSSProperties
+                  }
+                />
+              ))}
+            </div>
+          )}
+          <span className="relative text-5xl">🏉</span>
           <p className="display text-2xl text-gold-300">¡Sesión guardada!</p>
-          <p className="tele-num text-4xl font-semibold text-chalk">+{xp} XP</p>
+          <p className="tele-num gold-sheen text-4xl font-bold">+{xp} XP</p>
           <div className="chalk-line my-2 w-full" />
           <p className="tele-num text-sm text-chalk-dim">
             {saved.kicks.length} patadas · {eff}% objetivo cumplido
@@ -262,12 +324,59 @@ export default function CargarPage() {
           {byMode.length > 0 && (
             <p className="tele-num text-sm text-chalk-dim">{byMode.join(" · ")}</p>
           )}
+          {reward && reward.maxCombo >= 3 && (
+            <p className="tele-num text-sm text-gold-300">
+              🔥 Mejor racha de la sesión: {reward.maxCombo} seguidas
+            </p>
+          )}
           {saved.kicks.length > 0 && saved.kicks.every((k) => k.effortPct <= 40) && (
             <p className="text-xs text-try-400">
               🪶 Sesión de técnica pura — así se construye la cadena cinética
             </p>
           )}
         </motion.div>
+
+        {/* Subida de rango */}
+        {reward?.rankedUp && (
+          <motion.div
+            initial={{ scale: 0.7, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 220, damping: 16, delay: 0.25 }}
+            className="tele-card-gold flex items-center gap-3 px-6 py-3.5"
+          >
+            <span className="text-3xl">⭐</span>
+            <span className="text-left">
+              <span className="tech-label">Subiste de rango</span>
+              <span className="display block text-lg text-gold-300">{reward.newRank}</span>
+            </span>
+          </motion.div>
+        )}
+
+        {/* Insignias nuevas */}
+        {reward && reward.newBadges.length > 0 && (
+          <div className="flex flex-col items-center gap-2">
+            <p className="tech-label">
+              {reward.newBadges.length === 1 ? "Nueva insignia" : "Nuevas insignias"}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {reward.newBadges.map((b, i) => (
+                <motion.div
+                  key={b.id}
+                  initial={{ scale: 0, rotate: -12 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.35 + i * 0.12 }}
+                  className="tele-card-gold flex min-w-[92px] flex-col items-center px-3 py-3"
+                  title={b.description}
+                >
+                  <span className="text-3xl">{b.icon}</span>
+                  <span className="mt-1 text-center font-mono text-[9px] leading-tight tracking-wide text-gold-300">
+                    {b.name}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
         <button
           onClick={() => router.push("/")}
           className="btn-gold rounded-2xl px-8 py-3.5 text-sm font-bold tracking-wide uppercase"

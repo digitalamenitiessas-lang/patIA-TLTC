@@ -275,6 +275,20 @@ body {
   transform: translate(-50%, 0);
 }
 
+/* Estallido de partículas de recompensa (rank-up / insignia) */
+@keyframes reward-burst {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--a)) translateY(0) scale(0.4); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--a)) translateY(calc(var(--r) * -1)) scale(1); }
+}
+.reward-particle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation: reward-burst 1.3s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation-delay: var(--d, 0s);
+}
+
 /* Pulso vivo (badges, estado en vivo) */
 @keyframes live-pulse {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5); }
