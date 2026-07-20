@@ -4,8 +4,8 @@
   "description": "Telemetría, técnica y progresión para pateadores de la Clínica Daniel Tejerizo — Tucumán Lawn Tennis Club.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#050810",
-  "theme_color": "#050810",
+  "background_color": "#0d1524",
+  "theme_color": "#0d1524",
   "lang": "es",
   "icons": [
     {

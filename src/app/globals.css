@@ -4,12 +4,12 @@
   /* ── Paleta heráldica TLTC — muestreada del escudo 1902 ──
      Azul royal #094489 (cruz de San Andrés) · Oro #FFD100 (marco y letras) */
 
-  /* Fondo cancha nocturna — negro tintado hacia el royal del escudo */
-  --color-pitch-950: #03060e;
-  --color-pitch-900: #061021;
-  --color-pitch-800: #0a1830;
-  --color-pitch-700: #0f2343;
-  --color-pitch-600: #163157;
+  /* Fondo cancha nocturna — navy profundo (no negro, más amable a la vista) */
+  --color-pitch-950: #0d1524;
+  --color-pitch-900: #111d31;
+  --color-pitch-800: #17243d;
+  --color-pitch-700: #1f3052;
+  --color-pitch-600: #283c62;
 
   /* Azul del club */
   --color-navy-700: #052a55;
@@ -25,9 +25,9 @@
   --color-gold-400: #ffd100; /* ORO REAL DEL ESCUDO */
   --color-gold-300: #ffdf4d;
 
-  --color-chalk: #eef2fa;
-  --color-chalk-dim: #93a0ba;
-  --color-chalk-faint: #4c5875;
+  --color-chalk: #eaf0f8;
+  --color-chalk-dim: #a4b1c9;
+  --color-chalk-faint: #6f7c98;
 
   --color-try-500: #10b981;
   --color-try-400: #34d399;
@@ -40,6 +40,9 @@
 
 html {
   background: var(--color-pitch-950);
+  /* Base un poco más grande: el texto de lectura (rem) crece ~6%;
+     los tamaños en px fijos (nav, chips) quedan igual. */
+  font-size: 106.25%;
 }
 
 body {
@@ -217,8 +220,8 @@ body {
 
 .tech-label {
   font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.2em;
+  font-size: 0.6875rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-chalk-dim);
 }
