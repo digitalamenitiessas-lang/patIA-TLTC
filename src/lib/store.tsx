@@ -23,6 +23,97 @@ const LS_KEY = "patia-tltc-v1";
 interface StoreShape {
   profile: PlayerProfile;
   sessions: Session[];
+  /** IDs de sesiones aún no confirmadas en la nube (para reintentar) */
+  pendingSync?: string[];
+}
+
+/** Mapea una fila de la nube (training_sessions + logged_kicks) al shape de la app */
+function mapCloudRow(s: Record<string, unknown>): Session {
+  return {
+    id: s.id as string,
+    date: s.session_date as string,
+    rpe: (s.rpe_fatigue_index as number) ?? null,
+    windKmh: (s.wind_velocity_kmh as number) ?? 0,
+    windDirection: s.wind_direction as Session["windDirection"],
+    mentalNote: (s.psychological_note as string) ?? "",
+    confidence: (s.confidence as number) ?? null,
+    venue: (s.venue as string) ?? null,
+    venueVerified: (s.venue_verified as boolean) ?? false,
+    temperatureC: s.temperature_c != null ? Number(s.temperature_c) : null,
+    weatherAuto: (s.weather_auto as boolean) ?? false,
+    createdAt: s.created_at as string,
+    kicks: ((s.logged_kicks as Record<string, unknown>[]) ?? []).map((k) => ({
+      id: k.id as string,
+      x: Number(k.x_coord),
+      y: Number(k.y_coord),
+      distance: k.calculated_distance_m as number,
+      angle: k.calculated_angle_deg as number,
+      isMade: k.is_made as boolean,
+      category: k.kick_category as Session["kicks"][number]["category"],
+      effortPct: (k.effort_pct as number) ?? 40,
+      endX: k.end_x_coord != null ? Number(k.end_x_coord) : undefined,
+      endY: k.end_y_coord != null ? Number(k.end_y_coord) : undefined,
+      result: (k.result ?? undefined) as Session["kicks"][number]["result"],
+      metersGained: (k.meters_gained ?? undefined) as number | undefined,
+      createdAt: k.created_at as string,
+    })),
+  };
+}
+
+/**
+ * Sube una sesión a la nube de forma idempotente (upsert por id): reintentar
+ * una sesión ya sincronizada es un no-op. Devuelve true si quedó guardada.
+ */
+async function pushSession(
+  supabase: NonNullable<ReturnType<typeof getSupabase>>,
+  uid: string,
+  s: Session,
+): Promise<boolean> {
+  try {
+    const { error: e1 } = await supabase.from("training_sessions").upsert(
+      {
+        id: s.id,
+        player_id: uid,
+        session_date: s.date,
+        rpe_fatigue_index: s.rpe,
+        wind_velocity_kmh: s.windKmh,
+        wind_direction: s.windDirection,
+        psychological_note: s.mentalNote || null,
+        confidence: s.confidence,
+        venue: s.venue ?? null,
+        venue_verified: s.venueVerified ?? false,
+        temperature_c: s.temperatureC ?? null,
+        weather_auto: s.weatherAuto ?? false,
+      },
+      { onConflict: "id" },
+    );
+    if (e1) return false;
+    if (s.kicks.length) {
+      const { error: e2 } = await supabase.from("logged_kicks").upsert(
+        s.kicks.map((k) => ({
+          id: k.id,
+          session_id: s.id,
+          player_id: uid,
+          x_coord: k.x,
+          y_coord: k.y,
+          calculated_distance_m: k.distance,
+          calculated_angle_deg: k.angle,
+          is_made: k.isMade,
+          kick_category: k.category,
+          effort_pct: k.effortPct,
+          end_x_coord: k.endX ?? null,
+          end_y_coord: k.endY ?? null,
+          result: k.result ?? null,
+          meters_gained: k.metersGained ?? null,
+        })),
+        { onConflict: "id" },
+      );
+      if (e2) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const DEFAULT_PROFILE: PlayerProfile = {
@@ -93,7 +184,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [account, setAccount] = useState<AccountInfo>(DEFAULT_ACCOUNT);
   const [userId, setUserId] = useState<string | null>(null);
+  const [pendingSync, setPendingSync] = useState<string[]>([]);
   const userIdRef = useRef<string | null>(null);
+  const sessionsRef = useRef<Session[]>([]);
+  const pendingRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+  useEffect(() => {
+    pendingRef.current = pendingSync;
+  }, [pendingSync]);
+
+  // Reintenta subir las sesiones que quedaron pendientes (offline / error)
+  const flushPending = useCallback(async () => {
+    const supabase = getSupabase();
+    const uid = userIdRef.current;
+    if (!supabase || !uid || pendingRef.current.length === 0) return;
+    const toPush = sessionsRef.current.filter((s) =>
+      pendingRef.current.includes(s.id),
+    );
+    const done: string[] = [];
+    for (const s of toPush) {
+      if (await pushSession(supabase, uid, s)) done.push(s.id);
+    }
+    if (done.length) {
+      setPendingSync((prev) => prev.filter((id) => !done.includes(id)));
+    }
+  }, []);
 
   const hydrateFromCloud = useCallback(async (localFallback: StoreShape) => {
     const supabase = getSupabase();
@@ -167,42 +285,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      if (cloudSessions && cloudSessions.length >= localFallback.sessions.length) {
-        setSessions(
-          cloudSessions.map((s) => ({
-            id: s.id,
-            date: s.session_date,
-            rpe: s.rpe_fatigue_index,
-            windKmh: s.wind_velocity_kmh,
-            windDirection: s.wind_direction,
-            mentalNote: s.psychological_note ?? "",
-            confidence: s.confidence,
-            venue: s.venue ?? null,
-            venueVerified: s.venue_verified ?? false,
-            temperatureC: s.temperature_c != null ? Number(s.temperature_c) : null,
-            weatherAuto: s.weather_auto ?? false,
-            createdAt: s.created_at,
-            kicks: (s.logged_kicks ?? []).map(
-              (k: Record<string, unknown>) => ({
-                id: k.id as string,
-                x: Number(k.x_coord),
-                y: Number(k.y_coord),
-                distance: k.calculated_distance_m as number,
-                angle: k.calculated_angle_deg as number,
-                isMade: k.is_made as boolean,
-                category: k.kick_category as Session["kicks"][number]["category"],
-                effortPct: (k.effort_pct as number) ?? 40,
-                endX: k.end_x_coord != null ? Number(k.end_x_coord) : undefined,
-                endY: k.end_y_coord != null ? Number(k.end_y_coord) : undefined,
-                result: (k.result ?? undefined) as Session["kicks"][number]["result"],
-                metersGained: (k.meters_gained ?? undefined) as number | undefined,
-                createdAt: k.created_at as string,
-              }),
-            ),
-          })),
-        );
-      }
+      // Fusión sin pérdida: todo lo de la nube + las sesiones locales que
+      // todavía no llegaron a la nube (por id). Nunca se descarta lo local.
+      const cloudMapped = (
+        (cloudSessions as Record<string, unknown>[]) ?? []
+      ).map(mapCloudRow);
+      const cloudIds = new Set(cloudMapped.map((s) => s.id));
+      // Referencia viva (incluye lo agregado mientras la hidratación estaba en vuelo)
+      const localNow = sessionsRef.current.length
+        ? sessionsRef.current
+        : localFallback.sessions;
+      const localOnly = localNow.filter((s) => !cloudIds.has(s.id));
+      const merged = [...cloudMapped, ...localOnly].sort((a, b) =>
+        (b.createdAt || b.date).localeCompare(a.createdAt || a.date),
+      );
+      setSessions(merged);
       setCloud("online");
+
+      // Reintentar las locales que no están en la nube
+      if (localOnly.length) {
+        const done: string[] = [];
+        for (const s of localOnly) {
+          if (await pushSession(supabase, uid, s)) done.push(s.id);
+        }
+        setPendingSync((prev) => {
+          const stillPending = localOnly
+            .filter((s) => !done.includes(s.id))
+            .map((s) => s.id);
+          return Array.from(new Set([...prev.filter((id) => !done.includes(id)), ...stillPending]));
+        });
+      } else {
+        // limpiar pendientes que ya estén confirmados en la nube
+        setPendingSync((prev) => prev.filter((id) => !cloudIds.has(id)));
+      }
     } catch {
       setCloud("offline");
     }
@@ -215,61 +330,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setProfile(local.profile);
     setSessions(local.sessions);
+    setPendingSync(local.pendingSync ?? []);
     setReady(true);
     void hydrateFromCloud(local);
   }, [hydrateFromCloud]);
 
-  // Persistencia local ante cada cambio
+  // Persistencia local ante cada cambio (incluye la cola de pendientes)
   useEffect(() => {
-    if (ready) saveLocal({ profile, sessions });
-  }, [ready, profile, sessions]);
+    if (ready) saveLocal({ profile, sessions, pendingSync });
+  }, [ready, profile, sessions, pendingSync]);
+
+  // Al recuperar conexión, reintentar lo pendiente
+  useEffect(() => {
+    const onOnline = () => void flushPending();
+    window.addEventListener("online", onOnline);
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushPending]);
 
   const addSession = useCallback((s: Session) => {
+    // Guardado local instantáneo + marca como pendiente hasta confirmar en la nube
     setSessions((prev) => [s, ...prev]);
+    setPendingSync((prev) => [...prev, s.id]);
 
     const supabase = getSupabase();
     const uid = userIdRef.current;
-    if (!supabase || !uid) return;
-    (async () => {
-      try {
-        await supabase.from("training_sessions").insert({
-          id: s.id,
-          player_id: uid,
-          session_date: s.date,
-          rpe_fatigue_index: s.rpe,
-          wind_velocity_kmh: s.windKmh,
-          wind_direction: s.windDirection,
-          psychological_note: s.mentalNote || null,
-          confidence: s.confidence,
-          venue: s.venue ?? null,
-          venue_verified: s.venueVerified ?? false,
-          temperature_c: s.temperatureC ?? null,
-          weather_auto: s.weatherAuto ?? false,
-        });
-        if (s.kicks.length) {
-          await supabase.from("logged_kicks").insert(
-            s.kicks.map((k) => ({
-              id: k.id,
-              session_id: s.id,
-              player_id: uid,
-              x_coord: k.x,
-              y_coord: k.y,
-              calculated_distance_m: k.distance,
-              calculated_angle_deg: k.angle,
-              is_made: k.isMade,
-              kick_category: k.category,
-              effort_pct: k.effortPct,
-              end_x_coord: k.endX ?? null,
-              end_y_coord: k.endY ?? null,
-              result: k.result ?? null,
-              meters_gained: k.metersGained ?? null,
-            })),
-          );
-        }
-      } catch {
-        // los datos quedan en localStorage; se reintenta en la próxima carga
-      }
-    })();
+    if (!supabase || !uid) return; // queda pendiente: se reintenta al reconectar/recargar
+    pushSession(supabase, uid, s).then((ok) => {
+      if (ok) setPendingSync((prev) => prev.filter((id) => id !== s.id));
+    });
   }, []);
 
   const updateProfile = useCallback((patch: Partial<PlayerProfile>) => {
@@ -346,10 +434,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     };
   }, [sessions, profile]);
 
+  // Si hay sesiones pendientes de subir, el indicador muestra "sync"
+  const cloudStatus: PlayerCtx["cloud"] =
+    cloud === "online" && pendingSync.length > 0 ? "syncing" : cloud;
+
   const value = useMemo(
     () => ({
       ready,
-      cloud,
+      cloud: cloudStatus,
       profile,
       sessions,
       stats,
@@ -363,7 +455,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       ready,
-      cloud,
+      cloudStatus,
       profile,
       sessions,
       stats,
