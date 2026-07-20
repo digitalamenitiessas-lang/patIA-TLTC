@@ -83,6 +83,7 @@ export default function RootLayout({
       className={`${fraunces.variable} ${archivo.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="grain stadium-glow min-h-dvh">
+        <div aria-hidden className="atmosphere" />
         <PlayerProvider>
           <TourProvider>
             <AppNav />

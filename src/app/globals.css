@@ -54,10 +54,17 @@ body {
    ATMÓSFERA — luces de estadio + cruz de San Andrés + grano
    ══════════════════════════════════════════════════════════════ */
 
-/* Resplandor de estadio: mesh royal + brasa dorada + cruz de San Andrés
-   tenue, todo en el stack de fondo del body (una sola capa, sin colisión) */
+/* Resplandor de estadio: mesh royal + brasa dorada + cruz de San Andrés,
+   en una capa FIJA pintada una sola vez (en vez de background-attachment:
+   fixed, que repinta en cada frame de scroll y traba los celulares). */
 .stadium-glow {
   position: relative;
+}
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
     radial-gradient(ellipse 90% 50% at 50% -10%, rgba(9, 68, 137, 0.55), transparent 60%),
     radial-gradient(ellipse 60% 40% at 88% 6%, rgba(255, 209, 0, 0.08), transparent 65%),
@@ -65,22 +72,28 @@ body {
     linear-gradient(45deg, transparent 47.8%, rgba(61, 127, 217, 0.05) 47.8% 52.2%, transparent 52.2%),
     linear-gradient(-45deg, transparent 47.8%, rgba(255, 209, 0, 0.022) 47.8% 52.2%, transparent 52.2%),
     var(--color-pitch-950);
-  background-attachment: fixed;
 }
 
-/* Barrido de luz de estadio que cruza lentamente la parte superior */
+/* Barrido de luz de estadio — solo en desktop (puntero fino): en celulares
+   una animación perpetua con blur gasta GPU y batería sin aportar. */
 .stadium-glow::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: -60%;
-  width: 55%;
-  height: 42%;
-  z-index: 0;
-  pointer-events: none;
-  background: linear-gradient(100deg, transparent, rgba(255, 209, 0, 0.06), transparent);
-  filter: blur(28px);
-  animation: stadium-sweep 11s ease-in-out infinite;
+  display: none;
+}
+@media (hover: hover) {
+  .stadium-glow::after {
+    content: "";
+    display: block;
+    position: fixed;
+    top: 0;
+    left: -60%;
+    width: 55%;
+    height: 42%;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(255, 209, 0, 0.06), transparent);
+    filter: blur(28px);
+    animation: stadium-sweep 11s ease-in-out infinite;
+  }
 }
 
 @keyframes stadium-sweep {
@@ -101,8 +114,7 @@ body {
   inset: 0;
   z-index: 50;
   pointer-events: none;
-  opacity: 0.035;
-  mix-blend-mode: overlay;
+  opacity: 0.04;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 220px 220px;
 }
@@ -121,10 +133,9 @@ body {
 .tele-card {
   position: relative;
   background:
-    linear-gradient(158deg, rgba(13, 87, 173, 0.16), rgba(10, 24, 48, 0.86) 55%),
-    rgba(6, 16, 33, 0.6);
+    linear-gradient(158deg, rgba(13, 87, 173, 0.18), rgba(10, 24, 48, 0.92) 55%),
+    var(--color-pitch-900);
   border: 1px solid rgba(61, 127, 217, 0.18);
-  backdrop-filter: blur(14px);
   border-radius: 1.25rem;
   box-shadow:
     0 1px 0 rgba(120, 166, 230, 0.08) inset,
@@ -132,7 +143,34 @@ body {
   transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
+.tele-card-gold {
+  position: relative;
+  background:
+    linear-gradient(158deg, rgba(255, 209, 0, 0.15), rgba(10, 24, 48, 0.95) 58%),
+    var(--color-pitch-900);
+  border: 1px solid rgba(255, 209, 0, 0.32);
+  border-radius: 1.25rem;
+  box-shadow:
+    0 1px 0 rgba(255, 223, 77, 0.14) inset,
+    0 0 34px -14px rgba(255, 209, 0, 0.35),
+    0 18px 40px -24px rgba(3, 6, 14, 0.9);
+}
+
+/* El blur del vidrio y el hover solo en dispositivos con puntero (desktop):
+   en celulares el backdrop-filter es carísimo y traba el scroll. */
 @media (hover: hover) {
+  .tele-card,
+  .tele-card-gold {
+    backdrop-filter: blur(14px);
+    background:
+      linear-gradient(158deg, rgba(13, 87, 173, 0.16), rgba(10, 24, 48, 0.86) 55%),
+      rgba(6, 16, 33, 0.6);
+  }
+  .tele-card-gold {
+    background:
+      linear-gradient(158deg, rgba(255, 209, 0, 0.14), rgba(10, 24, 48, 0.9) 58%),
+      rgba(6, 16, 33, 0.6);
+  }
   a.tele-card:hover,
   .tele-card:has(> a):hover {
     transform: translateY(-2px);
@@ -141,20 +179,6 @@ body {
       0 1px 0 rgba(120, 166, 230, 0.1) inset,
       0 24px 48px -22px rgba(3, 6, 14, 0.95);
   }
-}
-
-.tele-card-gold {
-  position: relative;
-  background:
-    linear-gradient(158deg, rgba(255, 209, 0, 0.14), rgba(10, 24, 48, 0.9) 58%),
-    rgba(6, 16, 33, 0.6);
-  border: 1px solid rgba(255, 209, 0, 0.32);
-  backdrop-filter: blur(14px);
-  border-radius: 1.25rem;
-  box-shadow:
-    0 1px 0 rgba(255, 223, 77, 0.14) inset,
-    0 0 34px -14px rgba(255, 209, 0, 0.35),
-    0 18px 40px -24px rgba(3, 6, 14, 0.9);
 }
 
 /* Hairline dorada superior (como el marco del escudo) en cards destacadas */

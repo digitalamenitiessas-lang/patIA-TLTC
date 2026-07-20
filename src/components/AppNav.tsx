@@ -209,7 +209,7 @@ export function AppNav() {
 
       {/* ── Barra inferior móvil ──────────────────────────────── */}
       <nav className="fixed bottom-0 left-1/2 z-40 w-full max-w-md -translate-x-1/2 lg:hidden">
-        <div className="saltire-weave mx-3 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/20 bg-pitch-900/92 px-1.5 pt-2 pb-2 shadow-[0_-10px_44px_rgba(3,6,14,0.92)] backdrop-blur-xl">
+        <div className="saltire-weave mx-3 mb-4 flex items-end justify-between rounded-3xl border border-navy-300/20 bg-pitch-900/96 px-1.5 pt-2 pb-2 shadow-[0_-10px_44px_rgba(3,6,14,0.92)]">
           {MOBILE_TABS.map((tab) => {
             const active = isActive(pathname, tab.href);
 
