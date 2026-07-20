@@ -19,24 +19,90 @@ interface Row {
   is_anonymous?: boolean;
 }
 
+interface FeedbackRow {
+  id: string;
+  player_id: string;
+  coach_id: string;
+  body: string;
+  focus_next: string | null;
+  rating: number | null;
+  created_at: string;
+}
+
+interface ClinicStats {
+  players: number;
+  sessions: number;
+  kicks: number;
+  active7: number;
+}
+
 export default function AdminPage() {
   const { ready, account, userId, getAccessToken } = usePlayer();
   const [rows, setRows] = useState<Row[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
+  const [coachMap, setCoachMap] = useState<Record<string, string>>({});
+  const [stats, setStats] = useState<ClinicStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;
-    const { data } = await supabase
-      .from("player_profiles")
-      .select(
-        "id, full_name, email, avatar_url, division, role, approval_status, created_at, dni, position",
-      )
-      .order("created_at", { ascending: false });
-    setRows((data as Row[]) ?? []);
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const [
+      { data: profiles },
+      { data: coaches },
+      { data: fb },
+      { count: sessionCount },
+      { count: kickCount },
+      { data: recent },
+    ] = await Promise.all([
+      supabase
+        .from("player_profiles")
+        .select(
+          "id, full_name, email, avatar_url, division, role, approval_status, created_at, dni, position",
+        )
+        .order("created_at", { ascending: false }),
+      supabase.from("coaches").select("id, full_name"),
+      supabase
+        .from("coach_feedback")
+        .select("id, player_id, coach_id, body, focus_next, rating, created_at")
+        .order("created_at", { ascending: false }),
+      supabase.from("training_sessions").select("*", { count: "exact", head: true }),
+      supabase.from("logged_kicks").select("*", { count: "exact", head: true }),
+      supabase.from("training_sessions").select("player_id").gte("session_date", weekAgo),
+    ]);
+
+    const list = (profiles as Row[]) ?? [];
+    setRows(list);
+    setCoachMap(
+      Object.fromEntries(((coaches as { id: string; full_name: string }[]) ?? []).map((c) => [c.id, c.full_name])),
+    );
+    setFeedback((fb as FeedbackRow[]) ?? []);
+    setStats({
+      players: list.filter((r) => r.approval_status === "approved").length,
+      sessions: sessionCount ?? 0,
+      kicks: kickCount ?? 0,
+      active7: new Set(((recent as { player_id: string }[]) ?? []).map((r) => r.player_id)).size,
+    });
     setLoading(false);
   }, []);
+
+  const deleteFeedback = async (id: string) => {
+    const supabase = getSupabase();
+    if (!supabase || busy) return;
+    if (!confirm("¿Borrar esta devolución? El jugador dejará de verla.")) return;
+    setBusy(id);
+    try {
+      const { error } = await supabase.from("coach_feedback").delete().eq("id", id);
+      if (!error) setFeedback((prev) => prev.filter((f) => f.id !== id));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     // Traer el plantel es sincronizar con un sistema externo (Supabase)
@@ -103,6 +169,7 @@ export default function AdminPage() {
 
   const pending = rows.filter((r) => r.approval_status === "pending");
   const others = rows.filter((r) => r.approval_status !== "pending");
+  const nameOf = (id: string) => rows.find((r) => r.id === id)?.full_name ?? "Jugador";
 
   return (
     <main className="flex flex-col gap-5">
@@ -110,6 +177,19 @@ export default function AdminPage() {
         <p className="tech-label">Panel del entrenador</p>
         <h1 className="display text-2xl text-chalk">Administración</h1>
       </header>
+
+      {/* Panorama de la clínica */}
+      {stats && (
+        <section
+          className="rise grid grid-cols-2 gap-2 lg:grid-cols-4"
+          style={{ "--rise-delay": "0.04s" } as React.CSSProperties}
+        >
+          <Kpi n={stats.players} label="jugadores" />
+          <Kpi n={stats.active7} label="activos · 7 días" gold />
+          <Kpi n={stats.sessions} label="sesiones" />
+          <Kpi n={stats.kicks} label="patadas" />
+        </section>
+      )}
 
       {/* Pendientes */}
       <section className="rise flex flex-col gap-2.5" style={{ "--rise-delay": "0.08s" } as React.CSSProperties}>
@@ -234,7 +314,66 @@ export default function AdminPage() {
           ))}
         </div>
       </section>
+
+      {/* Devoluciones enviadas */}
+      <section className="rise flex flex-col gap-2" style={{ "--rise-delay": "0.24s" } as React.CSSProperties}>
+        <p className="tech-label px-1">Devoluciones enviadas · {feedback.length}</p>
+        {feedback.length === 0 ? (
+          <div className="tele-card px-5 py-6 text-center text-sm text-chalk-dim">
+            Todavía no se enviaron devoluciones. Cargá una desde Clínica.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2">
+            {feedback.map((f) => (
+              <article key={f.id} className="tele-card px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-chalk">
+                      {nameOf(f.player_id)}
+                    </p>
+                    <p className="tech-label">
+                      {coachMap[f.coach_id] ?? "Referente"} ·{" "}
+                      {new Date(f.created_at).toLocaleDateString("es-AR", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      {f.rating ? ` · ${"⭐".repeat(f.rating)}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    disabled={busy === f.id}
+                    onClick={() => deleteFeedback(f.id)}
+                    aria-label="Borrar devolución"
+                    className="shrink-0 rounded-lg border border-navy-300/25 px-2 py-1 font-mono text-[10px] text-chalk-faint uppercase hover:border-miss-500/50 hover:text-miss-500 disabled:opacity-50"
+                  >
+                    Borrar
+                  </button>
+                </div>
+                <p className="mt-2 line-clamp-3 border-l-2 border-gold-400/30 pl-3 text-xs leading-relaxed text-chalk-dim">
+                  {f.body}
+                </p>
+                {f.focus_next && (
+                  <p className="mt-1.5 text-[11px] text-chalk-faint">
+                    🎯 {f.focus_next}
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </main>
+  );
+}
+
+function Kpi({ n, label, gold }: { n: number; label: string; gold?: boolean }) {
+  return (
+    <div className={`${gold ? "tele-card-gold" : "tele-card"} px-4 py-3 text-center`}>
+      <p className={`tele-num text-2xl font-bold ${gold ? "text-gold-300" : "text-chalk"}`}>
+        {n}
+      </p>
+      <p className="tech-label mt-0.5">{label}</p>
+    </div>
   );
 }
 
